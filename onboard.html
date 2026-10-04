@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome to 0x Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Pixel&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{--bg:#fbfaf7;--ink:#14130f;--mute:#8c897e;--line:#d8d5ca;--fill:#f0eee7;--fill2:#e7e4da;--err:#c0392b;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{font-family:'Public Sans',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+.logo{position:fixed;top:22px;left:31px;font-family:'Geist Pixel',monospace;font-size:15px;letter-spacing:.3px}
+main{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:67px 22px 63px}
+.wrap{width:100%;max-width:462px}
+h1{font-size:24px;font-weight:500;letter-spacing:-.25px;line-height:1.2}
+h1 span{display:block;color:var(--mute);font-size:21px}
+.tabs{display:flex;gap:4px;margin:25px 0 14px;background:var(--fill);padding:4px;border-radius:6px}
+.tab{flex:1;height:31px;border:0;border-radius:4px;background:transparent;font:500 15px 'Public Sans',sans-serif;color:var(--mute);cursor:pointer;transition:.15s}
+.tab.on{background:var(--bg);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.btn{width:100%;height:42px;border:0;border-radius:4px;background:var(--fill);color:var(--ink);font:500 15px 'Public Sans',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s}
+.btn svg{width:15px;height:15px}
+.btn:hover:not(:disabled){background:var(--fill2)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.dark{background:var(--ink);color:var(--bg)}
+.btn.dark:hover:not(:disabled){background:#33312a}
+.sep{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:14px;margin:14px 0 2px}
+.sep::before,.sep::after{content:'';flex:1;height:1px;background:var(--line)}
+label{display:block;font-size:14px;font-weight:600;color:var(--mute);margin:14px 0 7px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input{width:100%;height:41px;padding:0 13px;border:1px solid var(--line);border-radius:4px;background:transparent;font:400 15px 'Public Sans',sans-serif;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s}
+input::placeholder{color:#b3b0a4}
+input:focus{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.go{margin-top:20px}
+.msg{margin-top:10px;font-size:14px;color:var(--err);min-height:17px;text-align:center}
+.msg.ok{color:#2f7a45}
+.alt{text-align:center;margin-top:13px;font-size:14px;font-weight:500}
+.alt a{color:var(--mute);cursor:pointer;text-decoration:none}
+.alt a:hover{color:var(--ink)}
+.legal{position:fixed;bottom:18px;left:0;right:0;text-align:center;font-size:14px;color:var(--mute);line-height:1.5;padding:0 22px;background:linear-gradient(transparent,var(--bg) 40%)}
+.hide{display:none!important}
+.opt{display:flex;align-items:center;justify-content:space-between;height:41px;padding:0 13px;border:1px solid var(--line);border-radius:4px;margin-bottom:8px;cursor:pointer;font-size:15px;transition:.15s}
+.opt:hover{background:var(--fill)}
+.opt.sel{border-color:var(--ink);background:var(--fill)}
+.dot{width:14px;height:14px;border:1.5px solid var(--mute);border-radius:50%;display:grid;place-items:center}
+.opt.sel .dot{border-color:var(--ink)}
+.opt.sel .dot::after{content:'';width:7px;height:7px;border-radius:50%;background:var(--ink)}
+.nav{display:flex;gap:8px;margin-top:20px}
+.nav .btn{height:42px}
+.nav .btn:first-child:not(:last-child){flex:0 0 84px}
+.bar{position:fixed;top:0;left:0;height:2px;width:100%;background:var(--ink);transform:scaleX(0);transform-origin:left;opacity:0}
+.bar.on{opacity:1;animation:ld 1.4s ease-in-out infinite}
+@keyframes ld{0%{transform:scaleX(0)}60%{transform:scaleX(.8)}100%{transform:scaleX(1)}}
+@media(max-width:504px){.logo{left:20px;top:17px}.row{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div class="logo">0x Loom</div>
+<main><div class="wrap">
+
+<!-- AUTH -->
+<section id="auth">
+  <h1>Welcome to 0x Loom<span id="sub">Create your account to start building</span></h1>
+  <div class="tabs" role="tablist">
+    <button class="tab on" id="tUp" role="tab" onclick="setTab('up')">Sign up</button>
+    <button class="tab" id="tIn" role="tab" onclick="setTab('in')">Sign in</button>
+  </div>
+
+  <button class="btn" id="gBtn" onclick="googleAuth()">
+    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+    <span id="gLabel">Sign up with Google</span>
+  </button>
+  <div class="sep">or</div>
+
+  <form id="fUp" onsubmit="return false">
+    <div class="row">
+      <div><label for="first">First name</label><input id="first" placeholder="Your first name" autocomplete="given-name"></div>
+      <div><label for="last">Last name</label><input id="last" placeholder="Your last name" autocomplete="family-name"></div>
+    </div>
+    <label for="email">Email</label><input id="email" type="email" placeholder="Your email address" autocomplete="email">
+    <label for="phone">Phone number</label><input id="phone" type="tel" placeholder="Your phone number" autocomplete="tel">
+    <div class="row">
+      <div><label for="pw">Password</label><input id="pw" type="password" placeholder="Create password" autocomplete="new-password"></div>
+      <div><label for="pw2">Confirm password</label><input id="pw2" type="password" placeholder="Confirm password" autocomplete="new-password"></div>
+    </div>
+    <label for="mpin">6-digit MPIN</label><input id="mpin" type="password" inputmode="numeric" maxlength="6" placeholder="MPIN for your account" autocomplete="off">
+    <button class="btn dark go" id="upBtn" onclick="submitSignup()">Continue</button>
+  </form>
+
+  <form id="fIn" class="hide" onsubmit="return false">
+    <label for="iemail">Email</label><input id="iemail" type="email" placeholder="Your email address" autocomplete="username">
+    <label for="ipw">Password</label><input id="ipw" type="password" placeholder="Your password" autocomplete="current-password">
+    <button class="btn dark go" id="inBtn" onclick="submitSignin()">Continue</button>
+  </form>
+
+  <p class="msg" id="msg" role="alert"></p>
+  <p class="alt" id="alt">Already have an account? <a onclick="setTab('in')">Sign in</a></p>
+</section>
+
+<!-- ONBOARDING -->
+<section id="onb" class="hide">
+  <h1 id="oTitle">Select gender<span id="oSub">Choose your gender preference</span></h1>
+  <div id="oStep0" style="margin-top:25px">
+    <div class="opt" onclick="pick('gender','Female',this)">Female<div class="dot"></div></div>
+    <div class="opt" onclick="pick('gender','Male',this)">Male<div class="dot"></div></div>
+    <div class="opt" onclick="pick('gender','Rather not say',this)">Rather not say<div class="dot"></div></div>
+  </div>
+  <div id="oStep1" class="hide" style="margin-top:25px">
+    <div class="opt" onclick="pick('profession','Developer',this)">Developer / Architect<div class="dot"></div></div>
+    <div class="opt" onclick="pick('profession','Manager',this)">Product Lead / Manager<div class="dot"></div></div>
+    <div class="opt" onclick="pick('profession','Student',this)">Student<div class="dot"></div></div>
+    <div class="opt" onclick="pick('profession','Other',this)">Other Professional<div class="dot"></div></div>
+  </div>
+  <div class="nav">
+    <button class="btn hide" id="oBack" onclick="oNav(-1)">Back</button>
+    <button class="btn dark" id="oNext" onclick="oNav(1)" disabled>Next</button>
+  </div>
+  <p class="msg" id="omsg" role="alert"></p>
+</section>
+
+</div></main>
+<p class="legal" id="legal">By creating an account, you agree to the<br>Terms of Service and Privacy Policy</p>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+const GOOGLE_CLIENT_ID = "600593339063-blt9bcoe1k382f82ri4gd7a2el2bqfv1.apps.googleusercontent.com";
+const HOME = './editor-home.html';
+const supabase = createClient('https://aitckloahlwemlekaour.supabase.co',
+ 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpdGNrbG9haGx3ZW1sZWthb3VyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyOTQ3MTMsImV4cCI6MjA3MTg3MDcxM30.uQjQLSz0mQuuArPQ_F8u-suQ-6T0e9bF11ahQtSw6yA');
+const $ = id => document.getElementById(id);
+
+// Already signed in -> skip straight to the editor (unless mid-onboarding)
+if (localStorage.getItem('vcloud_user') && !sessionStorage.getItem('onb_pending')) location.replace(HOME);
+if (sessionStorage.getItem('onb_pending') && localStorage.getItem('vcloud_user')) showOnboarding();
+
+const busy = on => { $('bar').classList.toggle('on', on); ['upBtn','inBtn','gBtn'].forEach(i => $(i).disabled = on); };
+const say = (t, ok) => { $('msg').textContent = t || ''; $('msg').className = 'msg' + (ok ? ' ok' : ''); };
+const startSession = (email, name) => { localStorage.setItem('vcloud_user', email); localStorage.setItem('vcloud_username', name || ''); };
+
+const findUser = async (email, cols) => {
+  const { data, error } = await supabase.from('users').select(cols).eq('username', email).maybeSingle();
+  if (error) throw error;
+  return data;
+};
+
+window.setTab = t => {
+  const up = t === 'up';
+  $('tUp').classList.toggle('on', up); $('tIn').classList.toggle('on', !up);
+  $('fUp').classList.toggle('hide', !up); $('fIn').classList.toggle('hide', up);
+  $('sub').textContent = up ? 'Create your account to start building' : 'Sign in to continue to 0x Loom';
+  $('gLabel').textContent = up ? 'Sign up with Google' : 'Sign in with Google';
+  $('alt').innerHTML = up ? 'Already have an account? <a onclick="setTab(\'in\')">Sign in</a>' : 'New to 0x Loom? <a onclick="setTab(\'up\')">Create account</a>';
+  $('legal').classList.toggle('hide', !up);
+  say('');
+};
+
+window.submitSignin = async () => {
+  const email = $('iemail').value.trim().toLowerCase(), pw = $('ipw').value;
+  if (!email || !pw) return say('Enter your email and password.');
+  busy(true); say('');
+  try {
+    const u = await findUser(email, 'id,name,password');
+    if (!u || u.password !== pw) { busy(false); return say('Email or password is incorrect.'); }
+    startSession(email, u.name);
+    location.href = HOME;
+  } catch (e) { console.error(e); busy(false); say('Could not reach the server. Try again.'); }
+};
+
+window.submitSignup = async () => {
+  const first = $('first').value.trim(), last = $('last').value.trim(),
+        email = $('email').value.trim().toLowerCase(), phone = $('phone').value.trim(),
+        pw = $('pw').value, pw2 = $('pw2').value, mpin = $('mpin').value.trim();
+  if (!first || !last || !email || !phone || !pw || !mpin) return say('Fill in every field.');
+  if (pw !== pw2) return say('Passwords do not match.');
+  if (!/^\d{6}$/.test(mpin)) return say('MPIN must be exactly 6 digits.');
+  busy(true); say('');
+  try {
+    if (await findUser(email, 'id')) { busy(false); return say('An account with this email exists. Sign in instead.'); }
+    const name = `${first} ${last}`;
+    const { error } = await supabase.from('users').insert({
+      username: email, name, phone_number: phone,
+      password: pw, mpin
+    });
+    if (error) {
+      busy(false);
+      return say(error.code === '23505' ? 'An account with this email exists. Sign in instead.' : 'Sign up failed. Try again.');
+    }
+    startSession(email, name);
+    sessionStorage.setItem('onb_pending', '1');
+    busy(false); showOnboarding();
+  } catch (e) { console.error(e); busy(false); say('Sign up failed. Try again.'); }
+};
+
+window.googleAuth = () => {
+  if (!window.google) return say('Google is still loading. Try again in a moment.');
+  const wantUp = $('tUp').classList.contains('on');
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'email profile openid',
+    callback: async res => {
+      if (!res.access_token) { busy(false); return say('Google sign-in was cancelled.'); }
+      busy(true); say('');
+      try {
+        const info = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${res.access_token}` } }).then(r => r.json());
+        const email = (info.email || '').toLowerCase();
+        if (!email) throw new Error('No email returned by Google');
+        const u = await findUser(email, 'id,name');
+        if (u) { startSession(email, u.name || info.name); location.href = HOME; return; }
+        // No account yet: finish sign up with the Google details prefilled
+        const [f, ...l] = (info.name || '').split(' ');
+        setTab('up');
+        $('first').value = f || ''; $('last').value = l.join(' '); $('email').value = email;
+        busy(false);
+        say(wantUp ? 'Add a phone number, password and MPIN to finish.' : 'No account found. Finish signing up below.', true);
+      } catch (e) { console.error(e); busy(false); say('Google sign-in failed. Try again.'); }
+    },
+    error_callback: () => { busy(false); say('Google sign-in was cancelled.'); }
+  });
+  busy(true);
+  client.requestAccessToken();
+};
+
+/* Onboarding */
+const state = { gender: null, profession: null };
+let step = 0;
+function showOnboarding() {
+  $('auth').classList.add('hide'); $('legal').classList.add('hide'); $('onb').classList.remove('hide');
+}
+window.pick = (k, v, el) => {
+  state[k] = v;
+  el.parentElement.querySelectorAll('.opt').forEach(o => o.classList.remove('sel'));
+  el.classList.add('sel'); $('oNext').disabled = false;
+};
+window.oNav = async d => {
+  const next = step + d;
+  if (next === 2) return finishOnboarding();
+  step = next;
+  $('oStep0').classList.toggle('hide', step !== 0); $('oStep1').classList.toggle('hide', step !== 1);
+  $('oTitle').innerHTML = (step ? 'Your profession' : 'Select gender') + `<span id="oSub">${step ? 'Help us customize your workspace setup' : 'Choose your gender preference'}</span>`;
+  $('oBack').classList.toggle('hide', step === 0);
+  $('oNext').textContent = step ? 'Submit' : 'Next';
+  $('oNext').disabled = !(step ? state.profession : state.gender);
+};
+async function finishOnboarding() {
+  const email = localStorage.getItem('vcloud_user');
+  if (!email) { $('omsg').textContent = 'Session missing. Reload and sign in again.'; return; }
+  $('bar').classList.add('on'); $('oNext').disabled = true; $('omsg').textContent = '';
+  try {
+    const { data, error } = await supabase.from('users')
+      .update({ gender: state.gender.toLowerCase(), profession: state.profession.toLowerCase() })
+      .eq('username', email).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error(`Profile for ${email} could not be found.`);
+    sessionStorage.removeItem('onb_pending');
+    location.href = HOME;
+  } catch (e) {
+    console.error(e);
+    $('bar').classList.remove('on'); $('oNext').disabled = false;
+    $('omsg').textContent = 'Could not save your answers: ' + e.message;
+  }
+}
+</script>
+</body>
+</html>
