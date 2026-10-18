@@ -5,8 +5,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist+Pixel&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet"><link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Pixel&family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
 <style>
+  .logo {
+    font-family: 'Geist Pixel', monospace;
+    margin: 20px;
+    font-size: 20px;
+  }
 :root{--bg:#fafafa;--side:#f4f4f4;--line:#e8e8e8;--hover:#ebebeb;--sel:#e4e4e4;--tx:#1d1d1f;--mut:#8a8a8e;--card:#fff;--acc:#111;
 --k:#a626a4;--s:#50a14f;--n:#b76b01;--c:#9a9aa0;--f:#4078f2;--t:#c18401;--err:#d93025;--warn:#b06000;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -122,6 +129,7 @@ svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke
 <div id="busy"><div><div class="spin" style="--s:32px"></div><span id="busyt">Loading…</span></div></div>
 <div id="app">
 <aside id="side">
+  <div class="logo">0x Loom</div>
  <div class="nav">
   <button class="item on" id="bNew"><svg viewBox="0 0 16 16"><path d="M2 3h12l-4.5 5.5V13l-3-1.5V8.5z"/></svg>New Chat</button>
   <button class="item" id="bSearch"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>Search</button>
@@ -752,8 +760,8 @@ const GROQ_URL="https://api.groq.com/openai/v1/chat/completions",MODEL="openai/g
 const GROQ_KEYS=[
  "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",
  "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", /* key 2 */
- "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", /* key 3 */
- "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", /* key 4 */
+ "", /* key 3 */
+ "", /* key 4 */
  "", /* key 5 */
 ];
 const SYS="You are a concise, accurate coding assistant inside a browser code editor. Use markdown code fences for code.";
@@ -913,6 +921,630 @@ T('Tijori','Open secrets…',openSecrets,'A');
 T('Tijori','Insert secret at cursor…',()=>{const ta=$$('ta');pickSecret(ta.selectionStart,ta.selectionEnd)},'A');
 T('AI','Open chats',openChats,'A');T('AI','New chat',()=>$$('aiN').click(),'A');
 renderBody();if(chats.length&&getChat()===undefined)active=null;
+})();
+</script>
+
+<!-- ===== RESPONSIVE PATCH =====
+     Paste this whole block in the editor file, as the LAST thing before </body>
+     (after the Tijori + AI add-on script) so these rules override earlier ones. -->
+<style>
+/* ---- base: use dynamic viewport height so mobile browser bars don't clip the UI ---- */
+html,body{height:100%}
+#app{height:100dvh}
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s;z-index:14}
+#scrim.on{opacity:1;pointer-events:auto}
+
+/* ---- tablet and below: sidebar becomes a drawer, preview becomes a full overlay ---- */
+@media (max-width:900px){
+  #side{position:absolute;top:0;left:0;height:100%;width:min(300px,86vw);z-index:15;box-shadow:4px 0 24px rgba(0,0,0,.18)}
+  #side.hide{margin-left:calc(-1 * min(300px,86vw) - 4px);box-shadow:none}
+  #prev{position:absolute;right:0;top:0;bottom:0;width:100%;min-width:0;max-width:none;z-index:6}
+  #cons{height:34dvh}
+  #bPal{font-size:0;padding:6px 10px}
+  #bPal::after{content:"Tools";font-size:12.5px}
+}
+
+/* ---- phone ---- */
+@media (max-width:700px){
+  body{font-size:14px}
+  #top{height:44px;padding:0 6px}
+  #top button{flex:none}
+  .tab{padding:6px 8px 6px 12px}
+  .tab i{width:22px;height:22px;font-size:17px}
+  #top #bRun{padding:6px 12px;margin-left:2px}
+
+  /* editor: smaller gutter, 16px text so iOS doesn't zoom on focus */
+  #ed #gut{width:42px;padding-right:8px;font-size:14px}
+  #ed .code{left:42px;font-size:14px;padding:12px 12px 40vh 6px}
+  #ta{font-size:16px}
+  #hl{font-size:16px}
+  #ed #gut{font-size:16px}
+  #status{gap:12px;padding:0 10px;overflow:hidden;white-space:nowrap}
+  #status #sz{display:none}
+
+  /* home screen */
+  #empty{padding:16px;gap:12px;justify-content:flex-start;padding-top:12vh}
+  .pick{font-size:24px;flex-wrap:wrap;justify-content:center;text-align:center}
+  .box{padding:14px}
+  #mq{font-size:16px}
+  .chips{flex-wrap:wrap}
+  .hint{display:none}
+
+  /* sidebar rows: bigger touch targets */
+  .row{padding:8px 10px}
+  .item{padding:10px 12px}
+
+  /* dialogs, palette, modals: 16px inputs, near-full width */
+  .dlg input,.pal input,.mb input,.mb textarea,.qp input,.aiin textarea,#q{font-size:16px}
+  .ov.top,.mdl.top{padding-top:8vh}
+  .mc{max-height:88dvh;width:94vw}
+  .pl{max-height:60dvh}
+
+  /* AI chat becomes a bottom sheet */
+  #aichat{left:8px;right:8px;width:auto;bottom:calc(8px + env(safe-area-inset-bottom,0px));height:min(78dvh,640px)}
+  .am{max-width:96%}
+
+  #toast{bottom:64px;max-width:90vw;text-align:center}
+}
+
+/* ---- touch devices: row actions can't rely on hover ---- */
+@media (hover:none){
+  .row .mx{opacity:1;padding:2px 10px}
+  .sec button,#top button{padding:8px}
+}
+
+/* ---- landscape phones: keep the console short ---- */
+@media (max-height:480px){
+  #cons{height:45dvh}
+  #empty{padding-top:4vh}
+}
+
+@media (prefers-reduced-motion:reduce){
+  #side,#scrim{transition:none}
+}
+</style>
+<script>
+(()=>{
+  const mq=matchMedia('(max-width:900px)');
+  const side=document.getElementById('side');
+  const scrim=document.createElement('div');
+  scrim.id='scrim';
+  document.getElementById('app').appendChild(scrim);
+
+  const syncScrim=()=>scrim.classList.toggle('on',mq.matches&&!side.classList.contains('hide'));
+  const setHidden=h=>{side.classList.toggle('hide',h);syncScrim()};
+
+  // start with the drawer closed on small screens, open on large ones
+  setHidden(mq.matches);
+  mq.addEventListener('change',e=>setHidden(e.matches));
+  new MutationObserver(syncScrim).observe(side,{attributes:true,attributeFilter:['class']});
+  scrim.onclick=()=>setHidden(true);
+
+  // close the drawer after picking a file or a sidebar action
+  document.getElementById('tree').addEventListener('click',e=>{
+    const row=e.target.closest('.row');
+    if(mq.matches&&row&&!row.querySelector('.ch')&&!e.target.closest('.mx'))setHidden(true);
+  });
+  document.querySelector('.nav').addEventListener('click',e=>{
+    const b=e.target.closest('button.item');
+    if(mq.matches&&b&&b.id!=='bTheme'&&b.id!=='bSearch')setHidden(true);
+  });
+
+  // Esc closes the drawer
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&mq.matches)setHidden(true)});
+})();
+</script>
+
+<!-- ===== GitHub + Persistence + Mobile-fix add-on =====
+     Paste this whole block as the LAST thing before </body> (after the responsive patch). -->
+<style>
+.mc.gh{width:min(660px,96vw);height:min(660px,88dvh)}
+.mc.gh .mb{flex:1}
+.gh-u{display:flex;align-items:center;gap:10px;min-width:0}.gh-u img{width:34px;height:34px;border-radius:50%;background:var(--hover)}
+.gh-t{display:flex;gap:2px;padding:0 12px;overflow-x:auto;border-bottom:1px solid var(--line);scrollbar-width:none}
+.gh-t button{padding:8px 11px;color:var(--mut);white-space:nowrap}.gh-t .on{color:var(--tx);box-shadow:inset 0 -2px var(--acc)}
+.gh-r{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.gh-r>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.gh-s{display:flex;align-items:center;gap:8px;color:var(--mut);font-size:12.5px}
+.mb .ac{display:flex;gap:6px;flex-wrap:wrap}.mb .ac button,.mb button.sr{padding:5px 10px;border-radius:7px;background:var(--hover)}
+.mb a{color:var(--f)}
+.mb button.pri{padding:8px 14px}
+@media(max-width:700px){
+ .mc.gh{width:100vw;height:100dvh;max-height:100dvh;border-radius:0}
+ .mb input,.mb textarea{font-size:16px}
+}
+</style>
+<script>
+(()=>{
+const LS=(k,v)=>{try{return v===undefined?localStorage.getItem(k):v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){return null}};
+const WS='vk_ws_v1',GK='vk_gh';
+
+/* ============ 1. Persistence (localStorage) ============ */
+const isTxt=p=>{const e=ext(baseOf(p));return !(IMG.includes(e)&&e!=='svg')&&!BIN.includes(e)&&!AUD.includes(e)&&!VID.includes(e)};
+const durl=f=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result);x.readAsDataURL(f)});
+let ready=false,st=0,warned=false;
+async function save(){if(!ready)return;
+ try{const files={};let size=0;
+  for(const[p,f]of pmap){const tb=tbOf(p);let o;
+   if(tb&&tb.kind==='txt')o={c:tb.text};else if(isTxt(p))o={c:await f.text()};else o={c:await durl(f),b:1,m:f.type};
+   size+=o.c.length;if(size>4.6e6){if(!warned){warned=true;toast('Workspace too big to fully save in browser storage')}break}
+   files[p]=o}
+  localStorage.setItem(WS,JSON.stringify({files,dirs:[...dirs],open:[...openSet],tabs:tabs.map(t=>t.path),cur:cur&&cur.path,name:$('repo').textContent}))}
+ catch(e){if(!warned){warned=true;toast('Could not save workspace (storage full?)')}}}
+const sched=()=>{clearTimeout(st);st=setTimeout(save,500)};
+async function restore(){let d=null;try{d=JSON.parse(LS(WS)||'null')}catch(e){}
+ if(d&&d.files&&(Object.keys(d.files).length||(d.dirs||[]).length)){
+  ensureRoot();pmap=new Map();dirs=new Set(d.dirs||[]);openSet=new Set(d.open||[]);
+  for(const[p,o]of Object.entries(d.files)){let f;
+   if(o.b){const s=atob(o.c.split(',')[1]),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);f=new File([u],baseOf(p),{type:o.m||''})}
+   else f=new File([o.c],baseOf(p));
+   pmap.set(p,f);addDirs(parentOf(p))}
+  root=build();$('repo').textContent=$('mname').textContent=d.name||'Workspace';$('q').style.display='block';
+  for(const p of d.tabs||[])if(pmap.has(p))await openFile({path:p});
+  if(d.cur&&tbOf(d.cur)){cur=tbOf(d.cur);sel=d.cur}
+  showView();toast('Workspace restored')}
+ ready=true}
+{const _r=render;render=function(){_r();sched()}}
+$('ta').addEventListener('input',sched);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')save()});
+addEventListener('pagehide',save);
+
+/* ============ 2. Bug fixes ============ */
+/* Ctrl+S / Download button failed outside claude.ai -> use the fallback saver */
+download=async function(){if(!cur)return toast('Open a file first');
+ const data=cur.kind==='txt'?new TextEncoder().encode(cur.text):new Uint8Array(await cur.file.arrayBuffer());
+ if(await saveBytes(cur.name,data)){cur.orig=cur.text;showView();toast('Saved '+cur.name)}};
+$('bDl').onclick=$('bDl2').onclick=()=>download();
+/* Folder picker (webkitdirectory) is unsupported on most phones -> fall back to multi-file picker */
+if(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform)))$('fd').click=()=>$('ff').click();
+
+/* ============ 3. GitHub ============ */
+let G=null;try{G=JSON.parse(LS(GK)||'null')}catch(e){}
+const gsave=()=>LS(GK,G?JSON.stringify(G):null);
+async function api(path,o={}){if(!G||!G.token)throw Error('Not connected to GitHub');
+ const r=await fetch(path.startsWith('http')?path:'https://api.github.com'+path,{method:o.m||'GET',headers:{Authorization:'Bearer '+G.token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(o.b?{'Content-Type':'application/json'}:{})},body:o.b?JSON.stringify(o.b):undefined});
+ if(r.status===204)return null;const j=await r.json().catch(()=>({}));
+ if(!r.ok){if(r.status===401){G.token='';gsave()}const e=Error(j.message||'HTTP '+r.status);e.status=r.status;throw e}return j}
+const u2b=u=>{let s='';for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)};
+const b2u=b=>{const s=atob(b.replace(/\s/g,'')),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u};
+const gsha=async u=>{const h=new TextEncoder().encode('blob '+u.length+'\0'),a=new Uint8Array(h.length+u.length);a.set(h);a.set(u,h.length);return[...new Uint8Array(await crypto.subtle.digest('SHA-1',a))].map(b=>b.toString(16).padStart(2,'0')).join('')};
+const pool=async(a,n,fn)=>{let i=0;await Promise.all(Array.from({length:n},async()=>{while(i<a.length)await fn(a[i++])}))};
+const encP=p=>p.split('/').map(encodeURIComponent).join('/');
+
+/* --- connect (popup) --- */
+function connect(){
+ const o=document.createElement('div');o.className='mdl';
+ o.innerHTML='<div class="mc" style="width:min(460px,94vw)"><div class="mh"><b>Connect GitHub</b><button class="x">×</button></div><div class="mb"><div class="gh-s">1. GitHub opens in a popup with the right permissions pre-selected. Click “Generate token”, then copy it.</div><button class="pri" id="gA" style="align-self:stretch">Open GitHub</button><div class="gh-s">2. Come back — it connects automatically when you paste (or just return to this tab).</div><input id="gT" type="password" placeholder="ghp_… or github_pat_…" autocomplete="off" spellcheck="false"><div class="er" id="gE"></div><div class="gh-s" id="gS">The token is stored only in this browser.</div></div></div>';
+ document.body.appendChild(o);
+ const T=o.querySelector('#gT'),E=o.querySelector('#gE'),S=o.querySelector('#gS');let pop=null,busy_=false;
+ const close=()=>{removeEventListener('focus',onf);o.remove()};
+ o.querySelector('.x').onclick=close;o.onmousedown=e=>{if(e.target===o)close()};
+ const tryTok=async v=>{v=(v||'').trim();if(busy_||!/^(gh[pousr]_|github_pat_)\w+$/.test(v))return;busy_=true;E.textContent='';S.textContent='Verifying…';
+  try{const r=await fetch('https://api.github.com/user',{headers:{Authorization:'Bearer '+v}});if(!r.ok)throw Error('GitHub rejected this token');const u=await r.json();
+   G={...(G||{}),token:v,user:{login:u.login,avatar_url:u.avatar_url},repo:(G&&G.repo)||'',branch:(G&&G.branch)||'',base:(G&&G.base)||{}};gsave();
+   try{pop&&pop.close()}catch(e){}close();toast('Connected as '+u.login);ghOpen('repos')}
+  catch(e){E.textContent=e.message;S.textContent='Try again with a fresh token.'}busy_=false};
+ const onf=async()=>{try{const t=await navigator.clipboard.readText();if(t&&t!==T.value){T.value=t.trim();tryTok(t)}}catch(e){}};
+ addEventListener('focus',onf);
+ T.oninput=()=>tryTok(T.value);
+ o.querySelector('#gA').onclick=()=>{const url='https://github.com/settings/tokens/new?description='+encodeURIComponent('Vasuki Editor')+'&scopes=repo,delete_repo,workflow';
+  const w=700,h=780;pop=window.open(url,'gh_auth',`popup=yes,width=${w},height=${h},left=${Math.max(0,(screen.width-w)/2)},top=${Math.max(0,(screen.height-h)/2)}`);
+  if(!pop)pop=window.open(url,'_blank');if(!pop)E.textContent='Popup blocked — allow popups for this site and try again.'};
+ T.focus()}
+
+/* --- modal shell --- */
+let M=null,tab='repos';
+const TABS={repos:'Repos',commit:'Commit',branches:'Branches',prs:'Pull requests',issues:'Issues',acct:'Account'};
+function ghOpen(t){if(!G||!G.token)return connect();if(M)M.remove();
+ M=document.createElement('div');M.className='mdl';
+ M.innerHTML='<div class="mc gh"><div class="mh"><div class="gh-u" id="ghu"></div><button class="x">×</button></div><div class="gh-t" id="ght"></div><div class="mb" id="ghb"></div></div>';
+ document.body.appendChild(M);const close=()=>{M&&M.remove();M=null};
+ M.querySelector('.x').onclick=close;M.onmousedown=e=>{if(e.target===M)close()};
+ $('ght').onclick=e=>{const b=e.target.closest('[data-t]');b&&show(b.dataset.t)};show(t||tab)}
+function head(){const u=$('ghu');if(!u||!G)return;u.innerHTML=`<img src="${esc(G.user.avatar_url)}" alt=""><div style="min-width:0"><b>${esc(G.user.login)}</b><div class="gh-s">${G.repo?esc(G.repo)+' · '+esc(G.branch):'No repo linked'}</div></div>`;
+ $('ght').innerHTML=Object.entries(TABS).map(([k,v])=>`<button data-t="${k}" class="${k===tab?'on':''}">${v}</button>`).join('')}
+async function show(t){tab=t;head();const b=$('ghb');if(!b)return;b.onclick=null;b.innerHTML='<div class="em">Loading…</div>';
+ try{await V[t](b)}catch(e){if($('ghb')===b)b.innerHTML='<div class="er">'+esc(e.message)+(e.status===401?' — please reconnect from the Account tab.':'')+'</div>'}head()}
+const on=(b,fn)=>{b.onclick=async ev=>{const x=ev.target.closest('[data-a]');if(!x)return;const t=x.textContent;x.disabled=true;
+ try{await fn(x.dataset.a,x.dataset)}catch(e){toast(e.message)}if(x.isConnected){x.disabled=false;x.textContent=t}}};
+const need=b=>{b.innerHTML='<div class="em">Link or create a repo first (Repos tab).</div>'};
+
+/* --- git operations --- */
+async function clone(full,br){const prog=m=>{const b=$('ghb');b&&(b.innerHTML='<div class="em">'+esc(m)+'</div>')};
+ prog('Reading tree…');let t;
+ try{t=await api(`/repos/${full}/git/trees/${encodeURIComponent(br)}?recursive=1`)}
+ catch(e){if(e.status===409||e.status===404){G.repo=full;G.branch=br;G.base={};gsave();toast('Repo is empty — linked');return}throw e}
+ const bl=t.tree.filter(x=>x.type==='blob');if(t.truncated||bl.length>400)toast('Large repo: loading the first 400 files');
+ const list=bl.slice(0,400),np=new Map(),base={};let n=0;
+ await pool(list,6,async x=>{const j=await api(`/repos/${full}/git/blobs/${x.sha}`);np.set(x.path,new File([b2u(j.content)],baseOf(x.path)));base[x.path]=x.sha;prog('Downloading '+(++n)+'/'+list.length)});
+ pmap=np;dirs=new Set();openSet=new Set();np.forEach((_,p)=>addDirs(parentOf(p)));root=build();tabs=[];cur=null;sel=null;
+ $('repo').textContent=$('mname').textContent=full.split('/')[1];$('q').style.display='block';
+ G.repo=full;G.branch=br;G.base=base;gsave();render();showView();toast('Cloned '+full)}
+async function changes(){const now={},out=[];for(const p of pmap.keys())now[p]=await gsha(await bytesOf(p));
+ for(const p in now)if(G.base[p]!==now[p])out.push({p,s:G.base[p]?'M':'A',sha:now[p]});
+ for(const p in G.base)if(!(p in now))out.push({p,s:'D'});return out.sort((a,b)=>a.p.localeCompare(b.p))}
+async function push(items,msg){const R='/repos/'+G.repo,br=encodeURIComponent(G.branch);let parent=null,baseTree=null;
+ const head_=async()=>{const ref=await api(`${R}/git/ref/heads/${br}`);parent=ref.object.sha;baseTree=(await api(`${R}/git/commits/${parent}`)).tree.sha};
+ try{await head_()}catch(e){if(e.status!==404&&e.status!==409)throw e}
+ if(!parent){const f=items.find(x=>x.s!=='D');if(!f)throw Error('Nothing to push');
+  await api(`${R}/contents/${encP(f.p)}`,{m:'PUT',b:{message:msg,content:u2b(await bytesOf(f.p)),branch:G.branch}});
+  G.base[f.p]=f.sha;gsave();items=items.filter(x=>x!==f);if(!items.length)return;await head_()}
+ const tree=[];
+ await pool(items,4,async x=>{if(x.s==='D')tree.push({path:x.p,mode:'100644',type:'blob',sha:null});
+  else{const j=await api(R+'/git/blobs',{m:'POST',b:{content:u2b(await bytesOf(x.p)),encoding:'base64'}});tree.push({path:x.p,mode:'100644',type:'blob',sha:j.sha})}});
+ const t=await api(R+'/git/trees',{m:'POST',b:{base_tree:baseTree,tree}});
+ const c=await api(R+'/git/commits',{m:'POST',b:{message:msg,tree:t.sha,parents:[parent]}});
+ await api(`${R}/git/refs/heads/${br}`,{m:'PATCH',b:{sha:c.sha}});
+ items.forEach(x=>{if(x.s==='D')delete G.base[x.p];else G.base[x.p]=x.sha});gsave()}
+
+/* --- tab views --- */
+const V={};
+V.repos=async b=>{
+ b.innerHTML='<div class="sr"><b>New repository</b><input id="nrN" placeholder="repo-name" style="margin-top:6px"><input id="nrD" placeholder="Description (optional)" style="margin-top:6px"><label class="gh-s" style="margin-top:6px"><input type="checkbox" id="nrP" checked style="width:auto;margin:0"> Private</label><label class="gh-s"><input type="checkbox" id="nrW" checked style="width:auto;margin:0"> Push current workspace after creating</label><div class="ac" style="margin-top:6px"><button class="pri" data-a="mk">Create repository</button></div></div><div id="rl"><div class="em">Loading repos…</div></div>';
+ on(b,async(a,d)=>{
+  if(a==='mk'){const n=$('nrN').value.trim();if(!n)throw Error('Repository name required');const go=$('nrW').checked&&pmap.size;
+   const r=await api('/user/repos',{m:'POST',b:{name:n,description:$('nrD').value,private:$('nrP').checked,auto_init:false}});
+   G.repo=r.full_name;G.branch=r.default_branch||'main';G.base={};gsave();toast('Created '+r.full_name);return show(go?'commit':'repos')}
+  if(a==='link'){G.repo=d.f;G.branch=d.b;G.base={};gsave();toast('Linked '+d.f);return show('commit')}
+  if(a==='clone'){await clone(d.f,d.b);return show('commit')}
+  if(a==='del'&&await dlg({title:'Delete '+d.f+'?',msg:'This permanently deletes the repository on GitHub.',ok:'Delete',danger:1})){
+   await api('/repos/'+d.f,{m:'DELETE'});if(G.repo===d.f){G.repo='';G.base={};gsave()}toast('Deleted');show('repos')}});
+ const l=await api('/user/repos?per_page=100&sort=pushed'),rl=$('rl');if(!rl)return;
+ rl.innerHTML=l.map(r=>`<div class="sr gh-r" style="margin-top:8px"><span><b>${esc(r.name)}</b>${r.private?' 🔒':''}${r.full_name===G.repo?' · linked':''}<div class="gh-s">${esc(r.description||r.full_name)}</div></span><span class="ac"><button data-a="clone" data-f="${esc(r.full_name)}" data-b="${esc(r.default_branch)}">Clone</button><button data-a="link" data-f="${esc(r.full_name)}" data-b="${esc(r.default_branch)}">Link</button><button data-a="del" data-f="${esc(r.full_name)}">Delete</button></span></div>`).join('')||'<div class="em">No repositories yet.</div>'};
+V.commit=async b=>{if(!G.repo)return need(b);const ch=await changes();
+ b.innerHTML=`<div class="gh-s">Pushing to <b>${esc(G.repo)}</b> on <b>${esc(G.branch)}</b></div>`+(ch.length?ch.map((x,i)=>`<label class="sr gh-r"><span><b>${x.s}</b> ${esc(x.p)}</span><input type="checkbox" data-i="${i}" checked style="width:auto"></label>`).join('')+'<input id="cmM" value="Update from 0x Loom Editor" placeholder="Commit message"><button class="pri" data-a="push">Commit &amp; push</button>':'<div class="em">Everything is in sync.</div>')+'<button class="sr" data-a="pull">Pull latest (replaces workspace)</button>';
+ on(b,async a=>{
+  if(a==='push'){const items=[...b.querySelectorAll('input[data-i]:checked')].map(i=>ch[+i.dataset.i]);if(!items.length)throw Error('Select at least one file');
+   const msg=$('cmM').value.trim()||'Update';b.querySelector('[data-a=push]').textContent='Pushing…';await push(items,msg);toast('Pushed '+items.length+' change'+(items.length>1?'s':''));show('commit')}
+  else if(await dlg({title:'Replace workspace?',msg:'Local changes will be overwritten with '+G.repo+'@'+G.branch+'.',ok:'Pull',danger:1})){await clone(G.repo,G.branch);show('commit')}})};
+V.branches=async b=>{if(!G.repo)return need(b);const l=await api(`/repos/${G.repo}/branches?per_page=100`);
+ b.innerHTML=`<div class="sr"><input id="nb" placeholder="new-branch (from ${esc(G.branch)})"><div class="ac" style="margin-top:6px"><button class="pri" data-a="nb">Create branch</button></div></div>`+l.map(x=>`<div class="sr gh-r"><span><b>${esc(x.name)}</b>${x.name===G.branch?' · current':''}</span><span class="ac">${x.name===G.branch?'':`<button data-a="sw" data-b="${esc(x.name)}">Switch &amp; pull</button>`}</span></div>`).join('');
+ on(b,async(a,d)=>{
+  if(a==='nb'){const n=$('nb').value.trim();if(!n)throw Error('Branch name required');const ref=await api(`/repos/${G.repo}/git/ref/heads/${encodeURIComponent(G.branch)}`);
+   await api(`/repos/${G.repo}/git/refs`,{m:'POST',b:{ref:'refs/heads/'+n,sha:ref.object.sha}});G.branch=n;gsave();toast('Created & switched to '+n);show('branches')}
+  else if(await dlg({title:'Switch to '+d.b+'?',msg:'The workspace will be replaced with that branch.',ok:'Switch',danger:1})){await clone(G.repo,d.b);show('branches')}})};
+V.prs=async b=>{if(!G.repo)return need(b);const R='/repos/'+G.repo,[info,l]=await Promise.all([api(R),api(R+'/pulls?state=open&per_page=50')]);
+ b.innerHTML=`<div class="sr"><input id="pT" placeholder="Pull request title"><input id="pH" value="${esc(G.branch)}" placeholder="head branch" style="margin-top:6px"><input id="pB" value="${esc(info.default_branch)}" placeholder="base branch" style="margin-top:6px"><div class="ac" style="margin-top:6px"><button class="pri" data-a="mk">Open pull request</button></div></div>`+(l.map(x=>`<div class="sr gh-r"><span><a href="${esc(x.html_url)}" target="_blank" rel="noopener">#${x.number} ${esc(x.title)}</a><div class="gh-s">${esc(x.head.ref)} → ${esc(x.base.ref)}</div></span><span class="ac"><button data-a="mg" data-n="${x.number}">Merge</button></span></div>`).join('')||'<div class="em">No open pull requests.</div>');
+ on(b,async(a,d)=>{
+  if(a==='mk'){const t=$('pT').value.trim();if(!t)throw Error('Title required');await api(R+'/pulls',{m:'POST',b:{title:t,head:$('pH').value.trim(),base:$('pB').value.trim()}});toast('Pull request opened');show('prs')}
+  else if(await dlg({title:'Merge #'+d.n+'?',ok:'Merge'})){await api(`${R}/pulls/${d.n}/merge`,{m:'PUT',b:{}});toast('Merged');show('prs')}})};
+V.issues=async b=>{if(!G.repo)return need(b);const R='/repos/'+G.repo,l=(await api(R+'/issues?state=open&per_page=50')).filter(x=>!x.pull_request);
+ b.innerHTML='<div class="sr"><input id="iT" placeholder="Issue title"><textarea id="iB" placeholder="Description (optional)" style="margin-top:6px"></textarea><div class="ac" style="margin-top:6px"><button class="pri" data-a="mk">Create issue</button></div></div>'+(l.map(x=>`<div class="sr gh-r"><span><a href="${esc(x.html_url)}" target="_blank" rel="noopener">#${x.number} ${esc(x.title)}</a></span><span class="ac"><button data-a="cl" data-n="${x.number}">Close</button></span></div>`).join('')||'<div class="em">No open issues.</div>');
+ on(b,async(a,d)=>{
+  if(a==='mk'){const t=$('iT').value.trim();if(!t)throw Error('Title required');await api(R+'/issues',{m:'POST',b:{title:t,body:$('iB').value}});toast('Issue created')}
+  else{await api(`${R}/issues/${d.n}`,{m:'PATCH',b:{state:'closed'}});toast('Closed')}show('issues')})};
+V.acct=async b=>{b.innerHTML=`<div class="sr gh-r"><span><b>${esc(G.user.login)}</b><div class="gh-s">Linked repo: ${esc(G.repo||'none')}</div></div></span><span class="ac"><button data-a="un">Unlink repo</button><button class="dg" data-a="out">Disconnect</button></span></div><div class="gh-s">Token is stored only in this browser. Revoke it anytime at github.com/settings/tokens.</div>`;
+ on(b,async a=>{if(a==='un'){G.repo='';G.base={};gsave();toast('Unlinked');show('acct')}else{G=null;gsave();M&&M.remove();M=null;toast('Disconnected')}})};
+
+/* --- entry points --- */
+{const nav=document.querySelector('.nav'),bt=document.createElement('button');bt.className='item';bt.id='bGh';
+ bt.innerHTML='<svg viewBox="0 0 16 16"><path d="M6 13.500c-3 .8-3-1.500-4-1.800M10 14v-2.200c0-.7.100-1.200-.4-1.600 2-.2 4-1 4-4.200 0-.9-.3-1.600-.9-2.200.1-.5.100-1.500-.1-2.100 0 0-.8-.2-2.500 1a8 8 0 0 0-4.200 0c-1.700-1.200-2.500-1-2.500-1-.3.600-.3 1.600-.1 2.100a3.200 3.200 0 0 0-.9 2.200c0 3.200 2 4 4 4.200-.5.400-.5 1-.4 1.600V14"/></svg>GitHub';
+ bt.onclick=()=>ghOpen();nav.appendChild(bt);
+ const c=document.querySelector('.chips'),ch=document.createElement('button');ch.className='chip';ch.textContent='GitHub';ch.onclick=()=>ghOpen();c.appendChild(ch)}
+T('GitHub','Open GitHub panel…',()=>ghOpen(),'A');
+T('GitHub','Commit & push…',()=>ghOpen('commit'),'A');
+T('GitHub','Create repository…',()=>ghOpen('repos'),'A');
+T('GitHub','Connect / reconnect GitHub…',()=>connect(),'A');
+
+restore();
+})();
+</script>
+
+
+
+<!-- ===== FIX PATCH =====
+     Paste this as the very LAST thing before </body> (after github-addon). -->
+<style>
+/* the sidebar now has 7 nav buttons; on phones/short screens they squeezed the file tree to 0px */
+#side{overflow-y:auto}
+#tree{min-height:180px}
+@media(max-width:900px),(max-height:700px){
+ .nav{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+ .nav .item{padding:8px 10px;font-size:13px}
+ .foot{display:none}
+}
+#top #bPub{padding:5px 12px;border-radius:8px;background:var(--acc);color:var(--bg);font-weight:500;margin-left:6px;white-space:nowrap}
+#top #bPub:hover{background:var(--acc);color:var(--bg);opacity:.85}
+</style>
+<script>
+(()=>{
+/* 1. Crash fix: autofill / IME / clipboard events fire keydown with no e.key -> e.key.toLowerCase() threw.
+      Capture-phase guard drops those events before any other handler sees them. */
+document.addEventListener('keydown',e=>{if(typeof e.key!=='string')e.stopImmediatePropagation()},true);
+
+/* 2. Publish button: opens the GitHub panel straight on the Commit tab
+      (connects first if needed). There: tick files, write a message, "Commit & push". */
+const b=document.createElement('button');b.id='bPub';b.title='Publish changes to GitHub';b.textContent='Publish';
+b.onclick=()=>{document.getElementById('bGh').click();
+ const t=document.querySelector('.gh-t [data-t="commit"]');t&&t.click()};
+document.getElementById('top').insertBefore(b,document.getElementById('bRun'));
+
+/* 3. After a clone: close the GitHub panel and reveal the sidebar so the files are visible */
+const toastEl=document.getElementById('toast');
+new MutationObserver(()=>{
+ if(toastEl.classList.contains('on')&&/^Cloned /.test(toastEl.textContent)){
+  const m=document.querySelector('.mc.gh');m&&m.parentNode.remove();
+  document.getElementById('side').classList.remove('hide');
+  render()}
+}).observe(toastEl,{childList:true,attributes:true});
+})();
+</script>
+
+
+<!-- ===== AI sidebar + Dependency map + Traffic add-on =====
+     Paste as the LAST thing before </body> (after github-fix). -->
+<style>
+#aichat{display:none!important}
+#aip{width:var(--aiw,380px);min-width:280px;max-width:62vw;flex:none;display:none;flex-direction:column;border-left:1px solid var(--line);background:var(--side);position:relative;color:var(--tx)}
+#aip.on{display:flex}
+#aiR{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:4;touch-action:none}
+#aiR:hover,#aiR.d{background:var(--acc);opacity:.25}
+.aph{display:flex;align-items:center;gap:2px;height:40px;padding:0 8px 0 14px;border-bottom:1px solid var(--line)}
+.aph b{font-weight:600}.aph .gh-s{flex:1;margin-left:8px}
+.aph button{padding:4px 8px;border-radius:7px;color:var(--mut)}.aph button:hover{background:var(--hover);color:var(--tx)}
+#apB{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.ax{max-width:96%;padding:8px 11px;border-radius:12px;word-break:break-word;line-height:1.5}
+.ax.user{align-self:flex-end;background:var(--acc);color:var(--bg)}.ax.model{align-self:flex-start;background:var(--hover)}
+.ax p{margin:0 0 6px}.ax pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;overflow:auto;margin:6px 0;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--tx)}
+.ax code{font:12px ui-monospace,Menlo,Consolas,monospace}.ax .cp{float:right;font-size:11px;color:var(--mut)}
+.ae{border:1px solid var(--line);border-radius:10px;background:var(--bg);margin:8px 0;overflow:hidden;color:var(--tx)}
+.ae .eh{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);font-size:12px}
+.ae .eh button{padding:3px 9px;border-radius:6px;background:var(--hover)}.ae .eh .ad{background:var(--acc);color:var(--bg)}
+.ae pre{margin:0;border:0;border-radius:0;max-height:200px}.ae pre span{display:block;white-space:pre}
+.ae .rm{color:var(--err)}.ae pre .ad{color:var(--s)}
+.apf{border-top:1px solid var(--line);padding:8px 10px}.apo{display:flex;gap:14px;color:var(--mut);font-size:12px;margin-bottom:6px}.apo input{width:auto;margin:0 4px 0 0}
+#apG{width:34px;height:34px;border-radius:50%;background:var(--acc);color:var(--bg);flex:none;font-size:16px}
+#trf{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+#trf .th{display:flex;gap:12px;align-items:center;height:44px;padding:0 10px;border-bottom:1px solid var(--line);color:var(--mut)}
+#trf .th button{padding:6px 12px;border-radius:8px;background:var(--hover);color:var(--tx)}#trf .th a{margin-left:auto;color:var(--f)}
+#trf iframe{flex:1;border:0;width:100%;background:#fff}
+.mb details.sr summary{cursor:pointer}.mb a[data-j]{cursor:pointer;color:var(--f)}
+@media(max-width:700px){#aip{position:fixed;inset:0;width:100%!important;max-width:none;z-index:18;padding-top:env(safe-area-inset-top,0px)}#aiR{display:none}}
+
+</style>
+<script>
+(()=>{
+const LS=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch(e){return null}};
+const SBU='https://aitckloahlwemlekaour.supabase.co',SBK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpdGNrbG9haGx3ZW1sZWthb3VyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyOTQ3MTMsImV4cCI6MjA3MTg3MDcxM30.uQjQLSz0mQuuArPQ_F8u-suQ-6T0e9bF11ahQtSw6yA';
+const isT=p=>{const e=ext(baseOf(p));return !(IMG.includes(e)&&e!=='svg')&&!BIN.includes(e)&&!AUD.includes(e)&&!VID.includes(e)};
+const txt=async p=>{const t=tbOf(p);return t&&t.kind==='txt'?t.text:await pmap.get(p).text()};
+const mdl=(t,c)=>{const o=document.createElement('div');o.className='mdl';o.innerHTML=`<div class="mc ${c||''}"><div class="mh"><b>${esc(t)}</b><button class="x">×</button></div><div class="mb"></div></div>`;document.body.appendChild(o);
+ const k=e=>{if(e.key==='Escape'){e.stopPropagation();close()}},close=()=>{o.remove();removeEventListener('keydown',k,true)};addEventListener('keydown',k,true);o.onmousedown=e=>{if(e.target===o)close()};o.querySelector('.x').onclick=close;return{body:o.querySelector('.mb'),close}};
+
+/* ---------- Tijori (read-only REST) ---------- */
+let vc=null,vt=0;
+async function vault(){if(vc&&Date.now()-vt<6e4)return vc;const id=LS('vcloud_user');if(!id)throw Error('No Tijori vault ID');
+ const r=await fetch(`${SBU}/rest/v1/env?id=eq.${encodeURIComponent(id)}&select=data`,{headers:{apikey:SBK,Authorization:'Bearer '+SBK}});
+ if(!r.ok)throw Error('Tijori unavailable ('+r.status+')');const j=await r.json();let a=[];try{a=JSON.parse((j[0]||{}).data||'[]')}catch(e){}
+ vc=Array.isArray(a)?a:[];vt=Date.now();return vc}
+
+/* ---------- Gemini with key failover ---------- */
+const DEFAULT_KEY='AIzaSyAUYTNdPYE1S2CRB3QDF_DUvnNvsf25ncs';
+const ST=new Map(),BASE='https://generativelanguage.googleapis.com/v1beta/models/',MODEL=()=>LS('vk_gmodel')||'gemini-2.5-flash';let kI=0;
+const mask=k=>k.slice(0,6)+'…'+k.slice(-4),fatal=m=>Object.assign(Error(m),{fatal:1});
+async function keys(){const l=(LS('vk_gkeys')||'').split(/\s+/).filter(k=>k.length>20);
+ try{(await vault()).forEach(e=>{if(/^gemini/i.test(e.label)&&e.data)l.push(e.data.trim())})}catch(e){}
+ if(DEFAULT_KEY.length>20)l.push(DEFAULT_KEY);return[...new Set(l)]}
+async function gem(contents,sys,onTok,signal,note){
+ const ks=await keys();if(!ks.length)throw fatal('No Gemini keys yet. Click ⚙ to add some (or save them in Tijori with a label starting GEMINI).');
+ let last=null;
+ for(let n=0;n<ks.length;n++){const i=(kI+n)%ks.length,k=ks[i];if(((ST.get(k)||{}).until||0)>Date.now())continue;let started=false;
+  try{const r=await fetch(`${BASE}${MODEL()}:streamGenerateContent?alt=sse`,{method:'POST',signal,headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents,generationConfig:{maxOutputTokens:8192,temperature:.4}})});
+   if(!r.ok){let msg='';try{msg=(await r.json()).error.message}catch(e){}
+    const bad=r.status===401||r.status===403||(r.status===400&&/api key/i.test(msg));
+    if(!bad&&(r.status===400||r.status===404))throw fatal(msg||'HTTP '+r.status);
+    ST.set(k,{ok:false,msg:bad?'invalid / no access':'HTTP '+r.status,until:Date.now()+(bad?36e5:r.status===429?6e4:15e3)});
+    last=Error('Key '+mask(k)+' failed ('+r.status+')');note&&note('Key '+mask(k)+' failed ('+r.status+') — trying next key…');continue}
+   const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+   for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});const ls=buf.split('\n');buf=ls.pop();
+    for(const l of ls){if(!l.startsWith('data:'))continue;try{const p=JSON.parse(l.slice(5)).candidates[0].content.parts;p.forEach(x=>{if(x.text&&!x.thought){started=true;onTok(x.text)}})}catch(e){}}}
+   ST.set(k,{ok:true,until:0});kI=i;note&&note('');return
+  }catch(e){if(e.name==='AbortError'||e.fatal||started)throw e;ST.set(k,{ok:false,msg:e.message,until:Date.now()+5e3});last=e;note&&note('Key '+mask(k)+' errored — trying next key…')}}
+ if(!ks.some(k=>k!==DEFAULT_KEY))throw Object.assign(Error('The shared key has reached its limit.'),{needKey:true});
+ throw last||Error('All keys are cooling down — try again in a minute.')}
+async function testKeys(out){const ks=await keys();if(!ks.length){out.innerHTML='<div class="er">No keys found.</div>';return}out.innerHTML='';
+ for(const k of ks){const row=document.createElement('div');row.className='sr';row.textContent=mask(k)+' …testing';out.appendChild(row);const t0=performance.now();
+  try{const r=await fetch(`${BASE}${MODEL()}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{role:'user',parts:[{text:'ping'}]}],generationConfig:{maxOutputTokens:16}})});
+   if(!r.ok){let m='';try{m=(await r.json()).error.message}catch(e){}throw Error(r.status+' '+m.slice(0,80))}
+   ST.set(k,{ok:true,until:0});row.innerHTML='✓ <b>'+mask(k)+'</b> · '+Math.round(performance.now()-t0)+' ms'}
+  catch(e){ST.set(k,{ok:false,msg:e.message,until:Date.now()+6e4});row.innerHTML='✗ <b>'+mask(k)+'</b> · <span class="er">'+esc(e.message)+'</span>'}}
+ keyStat()}
+function settings(){const m=mdl('Gemini keys & model');
+ m.body.innerHTML='<div class="gh-s">One key per line. Keys saved in Tijori under a label starting <b>GEMINI</b> are used too. If a key fails, the next one is tried automatically.</div><textarea id="gk" placeholder="AIza…" spellcheck="false" style="min-height:90px"></textarea><input id="gm" placeholder="Model" spellcheck="false"><div class="ac"><button class="pri" id="gSv">Save</button><button id="gTs">Test keys</button></div><div id="gR"></div>';
+ const K=m.body.querySelector('#gk'),M=m.body.querySelector('#gm');K.value=LS('vk_gkeys')||'';M.value=MODEL();
+ const sv=()=>{LS('vk_gkeys',K.value.trim());LS('vk_gmodel',M.value.trim()||'gemini-2.5-flash');ST.clear();keyStat()};
+ m.body.querySelector('#gSv').onclick=()=>{sv();toast('Saved');m.close()};
+ m.body.querySelector('#gTs').onclick=async e=>{sv();e.target.disabled=true;await testKeys(m.body.querySelector('#gR'));e.target.disabled=false}}
+async function keyStat(){const el=$('apK');if(!el)return;try{const k=await keys(),ok=k.filter(x=>(ST.get(x)||{ok:true}).ok!==false).length;el.textContent=k.length?ok+'/'+k.length+' keys ok':'no keys'}catch(e){}}
+
+/* ---------- AI sidebar ---------- */
+const RE=/```edit[ \t]+([^\n]+)\n<<<<<<< SEARCH\n([\s\S]*?)\n?=======\n([\s\S]*?)\n?>>>>>>> REPLACE[ \t]*\n?```/g;
+const F3='\x60\x60\x60';
+const SYS='You are a coding assistant inside a browser editor. The user\'s workspace files are provided as context. To propose a change, output edit blocks exactly like this:\n'+F3+'edit path/to/file.ext\n<<<<<<< SEARCH\nexact existing text (short but unique in the file)\n=======\nreplacement text\n>>>>>>> REPLACE\n'+F3+'\nLeave SEARCH empty to create a new file. Prefer small targeted edits over rewriting whole files. For secrets write {{tijori:LABEL}} using a provided Tijori label (filled in locally when the user accepts); never invent secret values. Keep explanations brief.';
+let msgs=[];try{msgs=JSON.parse(LS('vk_ai2')||'[]')}catch(e){}
+let busy=false,ctl=null,raf=0;const saveM=()=>LS('vk_ai2',JSON.stringify(msgs.slice(-40)));
+const P=document.createElement('aside');P.id='aip';
+P.innerHTML='<div id="aiR"></div><div class="aph"><b>Google Gemini</b><span id="apK" class="gh-s"></span><button id="apS" title="Keys & model">⚙</button><button id="apN" title="New chat">＋</button><button id="apX" title="Close">×</button></div><div id="apB"></div><div class="apf"><div class="apo"><label><input type="checkbox" id="apT" checked>Open tabs</label><label><input type="checkbox" id="apV" checked>Tijori labels</label></div><div class="aiin"><textarea id="apI" rows="1" placeholder="Ask, or mention @path/file…"></textarea><button id="apG" title="Send">↑</button></div></div>';
+$('app').appendChild(P);
+{const w=LS('vk_aiw');if(w)P.style.setProperty('--aiw',w);
+ const R=$('aiR');R.onpointerdown=e=>{R.setPointerCapture(e.pointerId);R.classList.add('d');
+  R.onpointermove=ev=>P.style.setProperty('--aiw',Math.max(280,Math.min(innerWidth*.62,innerWidth-ev.clientX))+'px');
+  R.onpointerup=()=>{R.classList.remove('d');R.onpointermove=R.onpointerup=null;LS('vk_aiw',P.style.getPropertyValue('--aiw'))}}}
+const openAI=()=>{P.classList.add('on');keyStat()},toggleAI=()=>P.classList.contains('on')?P.classList.remove('on'):openAI();
+$('apX').onclick=()=>P.classList.remove('on');$('apS').onclick=settings;
+$('apN').onclick=()=>{if(busy)return toast('Wait for the reply to finish');msgs=[];saveM();draw()};
+const txtMd=s=>s.split('```').map((p,i)=>{if(i%2){const nl=p.indexOf('\n'),c=nl>=0&&/^[\w+#.-]*$/.test(p.slice(0,nl).trim())?p.slice(nl+1):p;return`<pre><button class="cp">Copy</button><code>${esc(c.replace(/\n$/,''))}</code></pre>`}
+ return p.trim()?`<p>${esc(p).replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>')}</p>`:''}).join('');
+const edits=t=>[...t.matchAll(RE)].map(m=>({p:m[1].trim(),o:m[2],n:m[3]}));
+function rich(t,mi){let out='',last=0,k=0;const d=(msgs[mi].done||{});
+ for(const m of t.matchAll(RE)){out+=txtMd(t.slice(last,m.index));const st=d[k];
+  out+=`<div class="ae" data-m="${mi}" data-e="${k}"><div class="eh"><b>${esc(m[1].trim())}</b><span>${st?esc(st):'<button class="ad" data-a="ok">Accept</button> <button data-a="no">Reject</button>'}</span></div><pre>${m[2]?esc(m[2]).split('\n').map(l=>'<span class="rm">- '+l+'</span>').join(''):''}${esc(m[3]).split('\n').map(l=>'<span class="ad">+ '+l+'</span>').join('')}</pre></div>`;k++;last=m.index+m[0].length}
+ return out+txtMd(t.slice(last))}
+function draw(){const B=$('apB');
+if(!msgs.length){B.innerHTML='<div class="apE"><svg viewBox="0 0 24 24"><path d="M12 2C12.4 8.200 15.800 11.600 22 12C15.800 12.400 12.400 15.800 12 22C11.600 15.800 8.200 12.400 2 12C8.200 11.600 11.600 8.200 12 2Z"/></svg><div class="wm">Google <b>Gemini</b></div><p>Ask about your code. I can read your open files (or @path), and suggest edits you accept with one click.</p></div>';return} B.innerHTML=msgs.map((m,i)=>`<div class="ax ${m.role}">${m.role==='user'?esc(m.text).replace(/\n/g,'<br>'):rich(m.text,i)}${m.note?`<div class="gh-s">${esc(m.note)}</div>`:''}${m.err?`<div class="er">${esc(m.err)}</div>`:''}${busy&&i===msgs.length-1&&!m.text&&!m.err?'<span class="gh-s">Thinking…</span>':''}</div>`).join('');
+ B.scrollTop=B.scrollHeight;$('apG').textContent=busy?'■':'↑'}
+const sched=()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(draw)};
+async function ctx(text){const parts=['Workspace files:\n'+[...pmap.keys()].slice(0,300).join('\n')],seen=new Set();
+ const add=async p=>{if(seen.has(p)||!pmap.has(p)||!isT(p))return;seen.add(p);const t=await txt(p);parts.push('=== FILE '+p+' ===\n'+t.slice(0,12000)+(t.length>12000?'\n…(truncated)':''))};
+ if(cur&&cur.kind==='txt'){await add(cur.path);const ta=$('ta');if(ta.selectionStart!==ta.selectionEnd)parts.push('Selected text in '+cur.path+':\n'+ta.value.slice(ta.selectionStart,ta.selectionEnd))}
+ if($('apT').checked)for(const t of tabs)if(t.kind==='txt'&&seen.size<8)await add(t.path);
+ for(const m of text.matchAll(/@([\w./\-]+)/g))await add(m[1]);
+ if($('apV').checked){try{parts.push('Tijori secret LABELS (values hidden; reference with {{tijori:LABEL}}):\n'+(await vault()).map(e=>e.label).join('\n'))}catch(e){parts.push('(Tijori unavailable: '+e.message+')')}}
+ return parts.join('\n\n').slice(0,90000)}
+ 
+async function send(text){text=(text||'').trim();if(!text||busy)return;openAI();
+ msgs.push({role:'user',text});const a={role:'model',text:''};msgs.push(a);busy=true;ctl=new AbortController();draw();
+ try{const c=await ctx(text);let h=msgs.slice(0,-2).filter(m=>m.text).slice(-12).map(m=>({role:m.role,parts:[{text:m.text}]}));while(h.length&&h[0].role!=='user')h.shift();
+  h.push({role:'user',parts:[{text:c+'\n\n--- USER REQUEST ---\n'+text}]});
+  await gem(h,SYS,t=>{a.text+=t;sched()},ctl.signal,n=>{a.note=n;sched()})}
+ catch(e){if(e.name!=='AbortError')a.err=e.message}
+ busy=false;ctl=null;if(!a.text&&!a.err)a.text='(no response)';saveM();draw();keyStat()}
+$('apG').onclick=()=>{if(busy&&ctl)return ctl.abort();const t=$('apI').value;$('apI').value='';$('apI').style.height='';send(t)};
+$('apI').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('apG').click()}};
+$('apI').oninput=e=>{e.target.style.height='auto';e.target.style.height=Math.min(120,e.target.scrollHeight)+'px'};
+
+/* accepting edits writes into the real files */
+async function applyEdit(path,old,nw){
+ if(/\{\{tijori:/.test(nw)){const v=await vault();nw=nw.replace(/\{\{tijori:([^}]+)\}\}/g,(m,l)=>{const e=v.find(x=>x.label===l.trim());if(!e)throw Error('Tijori has no secret "'+l.trim()+'"');return e.data})}
+ path=VK.norm(path);let t;
+ if(!pmap.has(path)){if(old.trim())throw Error('File not found: '+path);t=nw}
+ else if(!old.trim())t=nw;
+ else{t=await txt(path);const crlf=t.includes('\r\n');if(crlf)t=t.replace(/\r\n/g,'\n');const i=t.indexOf(old);
+  if(i<0)throw Error('Text to replace not found — has the file changed?');if(t.indexOf(old,i+1)>=0)throw Error('Text to replace is ambiguous');
+  t=t.slice(0,i)+nw+t.slice(i+old.length);if(crlf)t=t.replace(/\n/g,'\r\n')}
+ const f=new File([t],baseOf(path));pmap.set(path,f);addDirs(parentOf(path));reveal(path);const tb=tbOf(path);if(tb&&tb.kind==='txt'){tb.text=t;tb.file=f}
+ await openFile({path});showView()}
+$('apB').onclick=async ev=>{const cp=ev.target.closest('.cp');if(cp)return navigator.clipboard.writeText(cp.nextElementSibling.textContent).then(()=>toast('Copied'),()=>toast('Copy blocked'));
+ const b=ev.target.closest('[data-a]');if(!b)return;const c=b.closest('.ae'),mi=+c.dataset.m,k=+c.dataset.e,m=msgs[mi];m.done=m.done||{};
+ if(b.dataset.a==='no'){m.done[k]='Rejected';saveM();return draw()}
+ b.disabled=true;try{const e=edits(m.text)[k];await applyEdit(e.p,e.o,e.n);m.done[k]='✓ Applied';saveM();draw();toast('Edit applied to '+e.p)}catch(er){toast(er.message);b.disabled=false}};
+
+/* ---------- rewire old chat entry points to the sidebar ---------- */
+for(let i=TOOLS.length-1;i>=0;i--)if(TOOLS[i].c==='AI')TOOLS.splice(i,1);
+T('AI','Toggle AI sidebar',toggleAI,'A');T('AI','New AI chat',()=>$('apN').click(),'A');T('AI','Gemini keys & model…',settings,'A');
+$('bChats').onclick=openAI;
+{const mq=$('mq'),go=()=>{const v=mq?mq.value.trim():'';if(!v)return $('fd').click();mq.value='';send(v)};
+ if(mq){mq.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go()}};$('bGo').onclick=go}}
+new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n.id==='cm'){const b=[...n.querySelectorAll('button')].find(x=>/^Ask AI/.test(x.textContent));
+ if(b)b.onclick=()=>{closeMenu();const ta=$('ta');openAI();$('apI').value=ta.selectionStart!==ta.selectionEnd?'Explain or improve the selected code.':'Review this file and suggest improvements.';$('apI').focus()}}}).observe(document.body,{childList:true});
+{const b=document.createElement('button');b.id='bAi';b.title='AI sidebar';b.textContent='Google Gemini';b.style.cssText='font-size:12.5px;padding:5px 10px;font-family:"google sans","Noto Sans",sans-serif';b.onclick=toggleAI;$('top').insertBefore(b,$('bPal'))}
+
+/* ---------- Dependency mapper ---------- */
+const KW=new Set('if else for while return function const let var class new this typeof import export from default async await try catch finally throw switch case break continue in of true false null undefined def self None True False and or not is lambda pass yield with as del global elif except raise print do void static public private protected int string bool float double'.split(' '));
+const isCode=p=>/\.(js|mjs|cjs|jsx|ts|tsx|py|java|c|h|cpp|hpp|cs|go|rs|php|rb|kt|swift|vue|html|htm)$/i.test(p);
+async function scan(){const F=[],LN=[],ix=new Map(),decl=[];let total=0;
+ for(const p of pmap.keys()){if(!isCode(p))continue;const t=await txt(p);total+=t.length;if(t.length>3e5||total>3e6)continue;
+  const fi=F.push(p)-1,py=/\.py$/i.test(p),lines=t.split('\n');LN.push(lines);let bc=false;
+  lines.forEach((raw,li)=>{if(raw.length>2000)return;let l=raw;
+   if(!py){if(bc){const e=l.indexOf('*/');if(e<0)return;l=' '.repeat(e+2)+l.slice(e+2);bc=false}
+    l=l.replace(/\/\*.*?\*\//g,m=>' '.repeat(m.length));const s=l.indexOf('/*');if(s>=0){bc=true;l=l.slice(0,s)}}
+   l=l.replace(/(["'`])(?:\\.|(?!\1).)*\1/g,m=>' '.repeat(m.length)).replace(py?/#.*$/:/\/\/.*$/,'');
+   for(const m of l.matchAll(/[A-Za-z_$][\w$]*/g)){const w=m[0];if(KW.has(w))continue;let a=ix.get(w);if(!a)ix.set(w,a=[]);a.push([fi,li+1,m.index])}
+   const add=(n,kind,c)=>{if(n&&!KW.has(n)&&/^[A-Za-z_$][\w$]*$/.test(n))decl.push({n,kind,fi,l:li+1,c})};
+   const D=(re,kind)=>{for(const m of l.matchAll(re))add(m[1],kind,m.index+m[0].lastIndexOf(m[1]))};
+   const PR=(m,from)=>{(m[1]||m[2]||'').split(',').forEach(s=>{const n=s.trim().replace(/^\.\.\./,'').replace(/[=:].*$/,'').trim();if(n)add(n,'param',m.index+m[0].indexOf(n,from))})};
+   if(py){D(/\bdef\s+([A-Za-z_]\w*)/g,'function');D(/\bclass\s+([A-Za-z_]\w*)/g,'class');D(/^\s*([A-Za-z_]\w*)\s*(?::[^=]+)?=(?!=)/g,'variable');D(/\bimport\s+([A-Za-z_]\w*)/g,'import');D(/\bfor\s+([A-Za-z_]\w*)\s+in\b/g,'variable');
+    for(const m of l.matchAll(/\bdef\s+\w+\s*\(([^)]*)\)/g))PR(m,m[0].indexOf('('))}
+   else{D(/\bfunction\s*\*?\s*([A-Za-z_$][\w$]*)/g,'function');D(/\b(?:class|struct|interface|enum)\s+([A-Za-z_$][\w$]*)/g,'class');D(/\b(?:func|fn|fun)\s+([A-Za-z_]\w*)/g,'function');
+    for(const m of l.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(async\s+)?(function\b|\([^)]*\)\s*=>|[\w$]+\s*=>)?/g))add(m[1],m[3]?'function':'variable',m.index+m[0].indexOf(m[1],m[0].search(/\s/)));
+    for(const m of l.matchAll(/\b(?:const|let|var)\s*[{[]([^}\]=]*)[}\]]\s*=/g))m[1].split(',').forEach(s=>{const n=s.split(':').pop().replace(/=.*$/,'').trim();if(n)add(n,'variable',m.index+m[0].indexOf(n))});
+    for(const m of l.matchAll(/\bfunction\s*[\w$]*\s*\(([^)]*)\)|\(([^()]*)\)\s*=>/g))PR(m,m[0].indexOf('('));
+    for(const m of l.matchAll(/\bimport\s+([A-Za-z_$][\w$]*)/g))add(m[1],'import',m.index+m[0].lastIndexOf(m[1]))}})}
+ const dp=new Set(decl.map(d=>d.fi+':'+d.l+':'+d.c)),by=new Map();
+ for(const d of decl){let s=by.get(d.n);if(!s)by.set(d.n,s={n:d.n,decls:[],uses:[]});s.decls.push(d)}
+ for(const s of by.values())s.uses=(ix.get(s.n)||[]).filter(u=>!dp.has(u[0]+':'+u[1]+':'+u[2]));
+ const ed=new Map();for(const s of by.values()){const df=new Set(s.decls.map(d=>d.fi));if(df.size!==1)continue;const a=[...df][0];for(const u of s.uses)if(u[0]!==a){const k=u[0]+'>'+a;ed.set(k,(ed.get(k)||0)+1)}}
+ return{F,LN,list:[...by.values()].sort((a,b)=>b.uses.length-a.uses.length||a.n.localeCompare(b.n)),edges:[...ed].map(([k,n])=>{const[a,b]=k.split('>');return{from:F[a],to:F[b],refs:n}}).sort((a,b)=>b.refs-a.refs)}}
+async function depMap(){const m=mdl('Dependency map','gh');m.body.innerHTML='<div class="em">Scanning…</div>';
+ let D;try{D=await scan()}catch(e){m.body.innerHTML='<div class="er">'+esc(e.message)+'</div>';return}
+ if(!D.list.length){m.body.innerHTML='<div class="em">No code files with symbols found in the workspace.</div>';return}
+ m.body.innerHTML=`<div class="gh-s">${D.F.length} files · ${D.list.length} symbols · name-based scan, not a full parser: the same name in different scopes is merged.</div><div class="ac"><input id="dq" placeholder="Filter symbols…" style="flex:1;min-width:140px"><select id="dk" style="padding:6px;border-radius:8px;background:var(--bg);color:var(--tx);border:1px solid var(--line)"><option value="">All kinds</option><option>function</option><option>class</option><option>variable</option><option>param</option><option>import</option></select><button id="dx">Export JSON</button></div><details class="sr"><summary>File dependencies (${D.edges.length})</summary>${D.edges.slice(0,150).map(e=>`<div class="gh-s">${esc(e.from)} → ${esc(e.to)} · ${e.refs} refs</div>`).join('')||'<div class="gh-s">None found</div>'}</details><div id="dl"></div>`;
+ const loc=(fi,l,c,t)=>`<a data-j="${fi}|${l}|${c}">${esc(D.F[fi])}:${l}</a>${t?' <span class="gh-s" style="display:inline">'+esc(t)+'</span>':''}`;
+ const snip=(fi,l)=>D.LN[fi][l-1].trim().slice(0,90);
+ const draw=()=>{const q=$$('dq').value.toLowerCase(),k=$$('dk').value;const v=D.list.filter(s=>(!q||s.n.toLowerCase().includes(q))&&(!k||s.decls.some(d=>d.kind===k)));
+  $$('dl').innerHTML=v.slice(0,150).map(s=>{const g={};s.uses.slice(0,300).forEach(u=>(g[u[0]]=g[u[0]]||[]).push(u));
+   return`<details class="sr"><summary><b>${esc(s.n)}</b> <span class="gh-s" style="display:inline">${[...new Set(s.decls.map(d=>d.kind))].join('/')} · ${s.decls.length} def · ${s.uses.length} uses</span></summary><div class="gh-s"><b>Defined</b></div>${s.decls.map(d=>`<div>${loc(d.fi,d.l,d.c,d.kind+': '+snip(d.fi,d.l))}</div>`).join('')}<div class="gh-s" style="margin-top:6px"><b>Used in</b></div>${Object.keys(g).map(f=>`<div class="gh-s"><b>${esc(D.F[f])}</b></div>`+g[f].map(u=>`<div style="padding-left:8px">${loc(u[0],u[1],u[2],'L'+u[1]+': '+snip(u[0],u[1]))}</div>`).join('')).join('')||'<div class="gh-s">Not used anywhere</div>'}</details>`}).join('')+(v.length>150?`<div class="em">Showing 150 of ${v.length} — filter to narrow.</div>`:'')||'<div class="em">No matches.</div>'};
+ const $$=id=>m.body.querySelector('#'+id);$$('dq').oninput=draw;$$('dk').onchange=draw;draw();
+ $$('dx').onclick=()=>saveBytes('dependency-map.json',new TextEncoder().encode(JSON.stringify({files:D.F,symbols:D.list.map(s=>({name:s.n,declarations:s.decls.map(d=>({kind:d.kind,file:D.F[d.fi],line:d.l,col:d.c})),usages:s.uses.map(u=>({file:D.F[u[0]],line:u[1],col:u[2]}))})),fileDependencies:D.edges},null,2)),'application/json');
+ m.body.onclick=async e=>{const a=e.target.closest('[data-j]');if(!a)return;const[fi,l,c]=a.dataset.j.split('|').map(Number);m.close();await openFile({path:D.F[fi]});
+  const ta=$('ta'),ls=ta.value.split('\n');let o=0;for(let i=0;i<l-1;i++)o+=ls[i].length+1;ta.focus();ta.setSelectionRange(o+c,o+c);ta.scrollTop=Math.max(0,(l-1)*20-ta.clientHeight/2);sync();pos()}}
+
+/* ---------- Traffic (full-screen iframe) ---------- */
+function traffic(){if($('trf'))return;const o=document.createElement('div');o.id='trf';
+ o.innerHTML='<div class="th"><button id="trB">← Back</button><span>0x.vasuki.cloud/traffic</span><a href="https://0x.vasuki.cloud/traffic" target="_blank" rel="noopener">Open in tab ↗</a></div><iframe src="https://0x.vasuki.cloud/traffic" allow="clipboard-write; fullscreen" title="Traffic"></iframe>';
+ document.body.appendChild(o);const k=e=>{if(e.key==='Escape')close()},close=()=>{o.remove();removeEventListener('keydown',k)};addEventListener('keydown',k);$('trB').onclick=close}
+
+/* ---------- nav buttons + palette ---------- */
+{const nav=document.querySelector('.nav'),mk=(id,label,svg,fn)=>{const b=document.createElement('button');b.className='item';b.id=id;b.innerHTML=`<svg viewBox="0 0 16 16">${svg}</svg>${label}`;b.onclick=fn;nav.appendChild(b)};
+ mk('bDep','Dependencies','<circle cx="3.500" cy="8" r="1.700"/><circle cx="12.500" cy="3.500" r="1.700"/><circle cx="12.500" cy="12.500" r="1.700"/><path d="M5 7.200l6-3M5 8.800l6 3"/>',depMap);
+ mk('bTrf','Traffic','<path d="M2 12l3.500-4 3 2.500L14 4"/><path d="M10.500 4H14v3.500"/>',traffic)}
+T('Code','Dependency map…',depMap,'A');T('Editor','Open Traffic',traffic,'A');
+draw();keyStat();
+})();
+</script>
+<style>.aph b {
+  font-family: 'google sans', 'Noto Sans', sans-serif;
+}
+
+.apE{margin:auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;max-width:260px;padding:20px;color:var(--mut)}
+.apE svg{width:56px;height:56px;fill:none;stroke:#8a8a8e;stroke-width:0.5;stroke-linejoin:round}
+.apE .wm{font-size:30px;letter-spacing:-.3px;color:var(--mut); font-family:'google sans','Noto Sans',sans-serif}
+.apE .wm b{font-weight:600;color:var(--tx)}
+.apE p{margin:0;font-size:13px;line-height:1.5}
+
+</style>
+
+
+<!-- ===== Settings popup add-on =====
+     Paste as the LAST thing before </body> (after ai-deps-addon). -->
+<style>
+/* every old sidebar button is hidden (still wired); only Settings shows */
+.nav>.item:not(#bSet){display:none!important}
+.nav{display:block!important}
+.stl{font-size:12px;color:var(--mut);margin:12px 2px 0;letter-spacing:.2px}
+.stg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stg button{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-align:left}
+.stg button:hover{background:var(--hover)}.stg svg{color:var(--mut)}
+.ghh{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border-radius:14px;background:#000;color:#fff;border:1px solid #333;font-weight:600;font-size:15px;text-align:left}
+.ghh:hover{background:#151515}
+.ghh .ghc{width:32px;height:32px;border-radius:50%;background:#fff;display:grid;place-items:center;flex:none}
+.ghh .ghc svg{width:32px;height:32px;fill:#000;stroke:none}
+@media(max-width:420px){.stg{grid-template-columns:1fr}}
+</style>
+<script>
+(()=>{
+const click=id=>document.getElementById(id).click();
+const conn=()=>{try{const g=JSON.parse(localStorage.getItem('vk_gh')||'null');return!!(g&&g.token)}catch(e){return false}};
+const GH='<svg viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>';
+/* [label, action, icon, keepOpen] */
+const GROUPS=[
+ ['Code',[
+  ['Dependencies',()=>click('bDep'),'<circle cx="3.500" cy="8" r="1.700"/><circle cx="12.500" cy="3.500" r="1.700"/><circle cx="12.500" cy="12.500" r="1.700"/><path d="M5 7.200l6-3M5 8.800l6 3"/>'],
+  ['Traffic',()=>click('bTrf'),'<path d="M2 12l3.500-4 3 2.500L14 4"/><path d="M10.500 4H14v3.500"/>'],
+  ['AI assistant',()=>click('bChats'),'<path d="M2.500 3.500h11v7h-5l-3 2.500v-2.500h-3z"/>']]],
+ ['Secrets',[
+  ['Tijori secrets',()=>click('bSec'),'<rect x="3" y="7" width="10" height="7" rx="2"/><path d="M5.500 7V5a2.500 2.500 0 0 1 5 0v2"/>']]],
+ ['Workspace',[
+  ['Open folder',()=>click('bNew'),'<path d="M2 4.500A1.500 1.500 0 0 1 3.500 3h3L8 4.500h4.500A1.500 1.500 0 0 1 14 6v5.500a1.500 1.500 0 0 1-1.500 1.500h-9A1.500 1.500 0 0 1 2 11.500z"/>'],
+  ['Search files',()=>click('bSearch'),'<circle cx="7" cy="7" r="4.500"/><path d="M10.500 10.500 14 14"/>'],
+  ['Export workspace (.zip)',()=>zipDl(''),'<path d="M8 2v8M4.500 7 8 10.500 11.500 7M3 13h10"/>']]],
+ ['Personalisation',[
+  ['Switch theme',()=>click('bTheme'),'<path d="M13 9.500A5.500 5.500 0 1 1 6.500 3a4.500 4.500 0 0 0 6.500 6.500z"/>',1],
+  ['Open files',()=>click('bFiles'),'<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7h6M5 10h3"/>']]]
+];
+function openSettings(){if(document.getElementById('stm'))return;
+ const o=document.createElement('div');o.className='mdl';o.id='stm';
+ o.innerHTML=`<div class="mc" style="width:min(520px,94vw)"><div class="mh"><b>Settings</b><button class="x">×</button></div><div class="mb"><button class="ghh" data-g="1"><span class="ghc">${GH}</span>${conn()?'GitHub options':'Connect GitHub'}</button>${GROUPS.map(([t,items])=>`<div class="stl">${t}</div><div class="stg">${items.map((it,i)=>`<button data-k="${t}|${i}"><svg viewBox="0 0 16 16">${it[2]}</svg>${it[0]}</button>`).join('')}</div>`).join('')}</div></div>`;
+ document.body.appendChild(o);
+ const k=e=>{if(e.key==='Escape'){e.stopPropagation();close()}},close=()=>{o.remove();removeEventListener('keydown',k,true)};
+ addEventListener('keydown',k,true);o.onmousedown=e=>{if(e.target===o)close()};o.querySelector('.x').onclick=close;
+ o.onclick=e=>{if(e.target.closest('[data-g]')){close();return click('bGh')}
+  const b=e.target.closest('[data-k]');if(!b)return;const[t,i]=b.dataset.k.split('|'),it=GROUPS.find(g=>g[0]===t)[1][+i];
+  if(!it[3])close();it[0]&&it[1]()}}
+{const nav=document.querySelector('.nav'),b=document.createElement('button');b.className='item';b.id='bSet';
+ b.innerHTML='<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.200"/><path d="M8 1.500v1.800M8 12.700v1.800M1.500 8h1.800M12.700 8h1.800M3.400 3.400l1.300 1.300M11.300 11.300l1.300 1.300M12.600 3.400l-1.300 1.300M4.700 11.300l-1.300 1.300"/></svg>Settings';
+ b.onclick=openSettings;nav.appendChild(b)}
+T('Editor','Open settings…',openSettings,'A');
 })();
 </script>
 </body></html>
