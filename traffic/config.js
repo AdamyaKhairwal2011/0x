@@ -12,5 +12,7 @@ window.TIJORI_CONFIG = {
   // Key in localStorage that holds the signed-in user's email
   LOCAL_STORAGE_USER_KEY: "vcloud_user",
   // Poll interval for "real-time" refresh, in ms
-  POLL_INTERVAL_MS: 15000
+  POLL_INTERVAL_MS: 15000,
+  name: "adamya",
+  robotic_hand: "https://youtube.com/shorts/o50V-aWKUCo?si=M0qPxKshoWl60H8X"
 };
