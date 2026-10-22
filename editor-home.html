@@ -2117,7 +2117,7 @@ const MENUS = {
   View: [['Toggle sidebar', () => setSidebar(!side.classList.contains('hide'))], ['Toggle theme', () => toggleTheme()], ['Toggle AI panel', () => toggleAi()]],
   Help: [['Extensions…', () => customize.click()], ['Secrets (Tijori)…', () => openSecrets()], ['Settings…', () => openSettings()]],
 };
-const mb = el('div'); mb.id = 'mbar'; mb.innerHTML = `<svg class="logo2" viewBox="0 0 16 16" style="fill:currentColor;stroke:none"><path d="M8 1 14 4.500v7L8 15 2 11.500v-7z"/></svg>`;
+const mb = el('div'); mb.id = 'mbar'; mb.innerHTML = `<span style="font-family: 'giest pixels', sans-serif;font-weight:600;font-size:15px;color:var(--tx)" class="logo2">0x</span>`;
 Object.entries(MENUS).forEach(([n, items]) => {
   const m = el('div', 'mi', `<button>${n}</button><div class="mdd"></div>`), dd = q('.mdd', m);
   items.forEach(([l, fn, k]) => { const b = el('button', '', `<span>${l}</span><em>${k || ''}</em>`); b.onclick = () => { closeMenus(); fn(); }; dd.appendChild(b); });
@@ -2176,7 +2176,7 @@ ask.placeholder = 'Plan, Build, / for skills, @ for context';
 const syncGo = () => { $('bGo').innerHTML = ask.value.trim() ? I.up : I.mic; const m = $('mdB'); if (m) m.innerHTML = esc(aiModel()) + ' ' + I.lock; };
 let plan = false;
 const planB = el('button', 'btn', 'Plan New Idea<i>⇧Tab</i>'), multiB = el('button', 'btn', 'Multitask'), chp = el('div', 'chp');
-chp = el('div', 'chp');
+
 chp.append(planB, multiB); w.appendChild(chp); w.appendChild(el('div', 'hint', 'Hooks let you control and extend the agent loop - press <code>⌘K</code> to get started'));
 const setPlan = v => { plan = v; planB.classList.toggle('on', v); ask.placeholder = v ? 'Describe the idea to plan…' : 'Plan, Build, / for skills, @ for context'; };
 planB.onclick = () => setPlan(!plan); multiB.onclick = () => toggleAi();
@@ -2578,5 +2578,179 @@ renderAll();
 })();
 </script>
 <!-- ===== end patch v3 ===== -->
+
+<!-- ===== 0x Loom patch v4: edit your own extensions =====
+     Paste right before </body>, AFTER patch v3. No other edits needed. -->
+<style id="loom-v4">
+.xedit{height:22px;padding:0 9px;font-size:12px;border:1px solid var(--line);margin-top:2px;margin-right:4px}
+.xi .bt2{display:flex;flex-direction:column;align-items:flex-end}
+#xed-code{min-height:280px;font:12.5px/1.5 var(--mono);white-space:pre;tab-size:2}
+</style>
+<script>
+(() => {
+const $ = id => document.getElementById(id), q = (s, r = document) => r.querySelector(s);
+const AF = Object.getPrototypeOf(async function () {}).constructor;
+const byId = id => LoomExt.list.find(e => e.id === id);
+const refreshUi = () => { renderAll(); const xq = $('xq'); if (xq) xq.dispatchEvent(new Event('input')); };
+
+const toLogo = f => new Promise((ok, no) => { const u = URL.createObjectURL(f), i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const s = Math.min(i.naturalWidth, i.naturalHeight) || 128; c.getContext('2d').drawImage(i, (i.naturalWidth - s) / 2, (i.naturalHeight - s) / 2, s, s, 0, 0, 128, 128); URL.revokeObjectURL(u); ok(c.toDataURL('image/webp', .88)); }; i.onerror = () => no(Error('Unreadable image')); i.src = u; });
+
+function editExt(id) {
+  const x = byId(id); if (!x) return toast('Extension not installed');
+  const m = modal('Edit “' + x.name + '”', 'min(760px,96vw)'), B = m.body, g = s => B.querySelector(s);
+  let logo = x.logo || '';
+  B.innerHTML = `<div class="split" style="justify-content:flex-start;gap:12px"><span class="xl" id="xe-l"></span><button class="btn line" id="xe-lb">Change logo</button><button class="btn ghost" id="xe-lx">Remove</button><input type="file" id="xe-lf" accept="image/*" hidden></div>
+  <div class="grid2" style="border:0"><label>Name<input id="xe-n"></label><label>Version<input id="xe-v"></label></div>
+  <label>Description<input id="xe-d" maxlength="300"></label>
+  <label>Code<textarea id="xed-code" spellcheck="false" wrap="off"></textarea></label>
+  <label>README (markdown)<textarea id="xe-r" style="min-height:100px;font:12.5px/1.5 var(--mono)"></textarea></label>
+  <div class="er" id="xe-e"></div>
+  <div class="split"><span class="muted">Saving reloads the extension.</span><span><button class="btn line" id="xe-c">Cancel</button> <button class="btn pri" id="xe-s">Save</button></span></div>`;
+  g('#xe-n').value = x.name; g('#xe-v').value = x.version || '1.0.0'; g('#xe-d').value = x.description || ''; g('#xed-code').value = x.code || ''; g('#xe-r').value = x.readme || '';
+  const showLogo = () => { const p = g('#xe-l'); p.style.backgroundImage = logo ? `url('${String(logo).replace(/['"()\\]/g, '')}')` : ''; p.textContent = logo ? '' : (x.name[0] || '?'); }; showLogo();
+  g('#xe-lb').onclick = () => g('#xe-lf').click();
+  g('#xe-lx').onclick = () => { logo = ''; showLogo(); };
+  g('#xe-lf').onchange = async e => { try { logo = await toLogo(e.target.files[0]); showLogo(); } catch (er) { g('#xe-e').textContent = er.message; } };
+  // Tab key inserts two spaces in the code box
+  g('#xed-code').onkeydown = e => { if (e.key === 'Tab') { e.preventDefault(); const t = e.target, s = t.selectionStart; t.setRangeText('  ', s, t.selectionEnd, 'end'); } };
+  g('#xe-c').onclick = m.close;
+  g('#xe-s').onclick = async () => {
+    const name = g('#xe-n').value.trim(), code = g('#xed-code').value, err = g('#xe-e'); err.textContent = '';
+    if (!name) return err.textContent = 'Name required';
+    try { new AF('Loom', 'ext', code); } catch (e) { return err.textContent = 'Syntax error: ' + e.message; }
+    const next = { ...x, name, description: g('#xe-d').value.trim(), version: g('#xe-v').value.trim() || '1.0.0', code, logo, readme: g('#xe-r').value };
+    try { LoomExt.unload(x.id); await LoomExt.install(next); }
+    catch (e) { return err.textContent = e.message; }
+    store.set('loom_pm:' + x.id, JSON.stringify({ version: next.version, readme: next.readme, logo: next.logo, description: next.description }));
+    m.close(); toast('Saved ' + name); refreshUi();
+  };
+}
+
+/* sidebar rows: add an Edit button to installed extensions */
+const xl = $('xl');
+const decorateRows = () => xl && xl.querySelectorAll('.xi').forEach(r => {
+  if (r.querySelector('[data-edit]') || !byId(r.dataset.id)) return;
+  const b = document.createElement('button'); b.className = 'btn xedit'; b.dataset.edit = r.dataset.id; b.textContent = 'Edit'; r.appendChild(b);
+});
+if (xl) new MutationObserver(decorateRows).observe(xl, { childList: true });
+
+/* extension tab: add an Edit button next to Disable / Uninstall */
+const xv = $('xview');
+const decorateView = () => {
+  const a = xv && q('.xva', xv); if (!a || a.querySelector('[data-edit]') || !a.querySelector('[data-a="un"]')) return;
+  const t = (q('.xvt', xv) || {}).textContent, x = LoomExt.list.find(e => e.name === t); if (!x) return;
+  const b = document.createElement('button'); b.className = 'btn pri'; b.dataset.edit = x.id; b.textContent = 'Edit'; a.prepend(b);
+};
+if (xv) new MutationObserver(decorateView).observe(xv, { childList: true });
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-edit]'); if (!b) return;
+  e.stopImmediatePropagation(); e.preventDefault(); editExt(b.dataset.edit);
+}, true);
+
+/* command palette: pick an extension to edit */
+COMMANDS.push(['Tools', 'Edit extension…', () => {
+  const m = modal('Edit extension'), list = LoomExt.list;
+  m.body.innerHTML = list.map((x, i) => `<div class="card split" style="cursor:pointer" data-i="${i}"><span><b>${esc(x.name)}</b><div class="muted">${esc(x.description || '')}</div></span><span class="muted">v${esc(x.version || '1.0.0')}</span></div>`).join('') || '<div class="muted">No extensions installed.</div>';
+  m.body.onclick = ev => { const c = ev.target.closest('[data-i]'); if (c) { m.close(); editExt(list[+c.dataset.i].id); } };
+}]);
+
+decorateRows(); decorateView();
+})();
+</script>
+<!-- ===== end patch v4 ===== -->
+
+<!-- ===== 0x Loom patch v5: working top menu bar =====
+     Paste right before </body>, AFTER patch v3 (and v4 if you added it). -->
+<style id="loom-v5">
+/* v3 made #mbar scrollable (overflow-x:auto), which also clipped the dropdowns. */
+#mbar{overflow:visible!important;z-index:60}
+.mdd{z-index:61;min-width:240px;max-height:calc(100dvh - 60px);overflow:auto}
+.mdd hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.mdd button:disabled{opacity:.45;cursor:default}
+.mdd button:disabled:hover{background:none}
+</style>
+<script>
+(() => {
+const bar = document.getElementById('mbar'); if (!bar) return;
+const ta = document.getElementById('ta');
+const hasText = () => { const r = S.cur && rec(S.cur); return !!r && r.kind === 'txt'; };
+const needText = fn => () => { if (!hasText()) return toast('Open a text file first'); fn(); };
+const clickBtn = (re) => { const b = [...document.querySelectorAll('.nav .btn')].find(x => re.test(x.textContent)); if (b) b.click(); };
+const cmd = name => () => { const c = COMMANDS.find(c => c[1] === name); c ? c[2]() : toast('Not available'); };
+
+const MENUS = {
+  File: [
+    ['New file…', () => newFile(S.sel && S.dirs.has(S.sel) ? S.sel : dirOf(S.sel || '')), ''],
+    ['New folder…', () => newFolder(S.sel && S.dirs.has(S.sel) ? S.sel : dirOf(S.sel || '')), ''],
+    ['Open folder…', () => document.getElementById('pickDir').click(), ''],
+    ['Open files…', () => document.getElementById('pickFiles').click(), ''],
+    '-',
+    ['Save / Download', () => downloadPath(), 'Ctrl S'],
+    ['Rename current file', () => S.cur ? renamePath(S.cur) : toast('Open a file first'), 'F2'],
+    ['Close tab', () => S.cur ? closeTab(S.cur) : toast('No tab open'), ''],
+    '-',
+    ['Commit & push…', () => openGit('commit'), ''],
+    ['GitHub…', () => openGit(), ''],
+  ],
+  Edit: [
+    ['Undo', needText(() => { ta.focus(); document.execCommand('undo'); }), 'Ctrl Z'],
+    ['Redo', needText(() => { ta.focus(); document.execCommand('redo'); }), 'Ctrl Y'],
+    '-',
+    ['Cut', needText(() => { ta.focus(); document.execCommand('cut'); }), 'Ctrl X'],
+    ['Copy', needText(() => { ta.focus(); document.execCommand('copy'); }), 'Ctrl C'],
+    ['Paste', needText(() => { ta.focus(); navigator.clipboard.readText().then(t => editText(ta.selectionStart, ta.selectionEnd, t), () => toast('Clipboard blocked — use Ctrl V')); }), 'Ctrl V'],
+    ['Select all', needText(() => { ta.focus(); ta.select(); }), 'Ctrl A'],
+    '-',
+    ['Find & replace…', needText(() => findReplace()), 'Ctrl F'],
+    ['Toggle line comment', cmd('Toggle line comment'), ''],
+    ['Command palette…', () => openPalette(), 'Ctrl K'],
+  ],
+  View: [
+    ['Toggle sidebar', () => setSidebar(!document.getElementById('side').classList.contains('hide')), ''],
+    ['Toggle theme', () => toggleTheme(), ''],
+    ['Toggle AI panel', () => toggleAi(), ''],
+    ['Toggle output console', () => { consOpen = !consOpen; renderView(); }, ''],
+    '-',
+    ['Extensions', () => clickBtn(/Customize|Extensions/), ''],
+  ],
+  Run: [
+    ['Run current file', () => runCurrent(), 'Ctrl Enter'],
+    ['Clear output', () => { document.getElementById('cout').innerHTML = ''; }, ''],
+    ['Close preview', () => document.getElementById('pClose').click(), ''],
+  ],
+  Tools: [
+    ['Secrets (Tijori)…', () => openSecrets(), ''],
+    ['Gemini keys & model…', () => aiSettings(), ''],
+    ['Tijori login…', () => tijoriLogin(true), ''],
+    ['Settings…', () => openSettings(), ''],
+  ],
+};
+
+// replace the old (clipped) menus, keep the logo
+bar.querySelectorAll('.mi').forEach(m => m.remove());
+const closeAll = () => bar.querySelectorAll('.mi.on').forEach(m => m.classList.remove('on'));
+Object.entries(MENUS).forEach(([name, items]) => {
+  const mi = document.createElement('div'); mi.className = 'mi';
+  mi.innerHTML = `<button>${name}</button><div class="mdd"></div>`;
+  const dd = mi.querySelector('.mdd');
+  items.forEach(it => {
+    if (it === '-') return dd.appendChild(document.createElement('hr'));
+    const b = document.createElement('button');
+    b.innerHTML = `<span>${it[0]}</span><em>${it[2] || ''}</em>`;
+    b.onmousedown = e => e.preventDefault();                 // keep the editor selection
+    b.onclick = () => { closeAll(); try { it[1](); } catch (e) { toast(e.message); } };
+    dd.appendChild(b);
+  });
+  mi.querySelector(':scope > button').onclick = e => { e.stopPropagation(); const was = mi.classList.contains('on'); closeAll(); if (!was) mi.classList.add('on'); };
+  mi.onmouseenter = () => { if (bar.querySelector('.mi.on') && !mi.classList.contains('on')) { closeAll(); mi.classList.add('on'); } };
+  bar.appendChild(mi);
+});
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#mbar')) closeAll(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(); });
+window.addEventListener('blur', closeAll);
+})();
+</script>
+<!-- ===== end patch v5 ===== -->
 </body>
 </html>
