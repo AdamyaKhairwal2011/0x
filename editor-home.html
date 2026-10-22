@@ -158,7 +158,6 @@ svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke
     <input id="filter" placeholder="Filter files…">
     <div id="tree"></div>
     <div class="sfoot">
-      <button class="btn" id="bGit"><svg viewBox="0 0 16 16"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="6" r="1.5"/><path d="M4 5v6M12 7.5c0 2-4 1.5-8 3.5"/></svg>GitHub</button>
       <button class="btn" id="bSettings"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3"/></svg>Settings</button>
     </div>
   </aside>
@@ -311,9 +310,14 @@ const addDirs = p => { while (p) { S.dirs.add(p); p = dirOf(p); } };
 const reveal  = p => { let a = dirOf(p); while (a) { S.openDirs.add(a); a = dirOf(a); } };
 const exists  = p => S.files.has(p) || S.dirs.has(p);
 
+let binCached = 0;   // characters of image/media data already cached for saving
 async function addFile(path, file) {
-  const kind = kindOf(path), r = { kind, file };
-  if (kind === 'txt') r.text = r.orig = await file.text();
+  const r = { kind: kindOf(path), file };
+  if (r.kind === 'txt') {
+    try { r.text = r.orig = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await file.arrayBuffer()); }
+    catch { r.kind = 'bin'; }   // not UTF-8: keep the raw bytes untouched
+  }
+  if (r.kind !== 'txt' && binCached + file.size * 1.4 < CONFIG.maxPersistBytes) { r.dataUrl = await toDataURL(file); binCached += r.dataUrl ? r.dataUrl.length : 0; }
   S.files.set(path, r); addDirs(dirOf(path));
 }
 async function bytesOf(p) { const r = rec(p); return r.kind === 'txt' ? new TextEncoder().encode(r.text) : new Uint8Array(await r.file.arrayBuffer()); }
@@ -321,6 +325,7 @@ async function readBlob(p) { const r = rec(p); return r.kind === 'txt' ? new Blo
 
 /* Replace the whole workspace. `entries` = [[path, File], ...] */
 async function loadWorkspace(entries, name) {
+  wsReady = true; binCached = 0;
   S.files.clear(); S.dirs.clear(); S.openDirs.clear(); S.tabs = []; S.cur = null; S.sel = null; S.filter = '';
   $('filter').value = '';
   S.repo = name || 'Workspace';
@@ -390,30 +395,48 @@ async function downloadPath(p = S.cur) {
    3. PERSISTENCE (localStorage)
    ====================================================================== */
 const WS_KEY = 'vk_ws_v2';
-const toDataURL = f => new Promise(r => { const x = new FileReader(); x.onload = () => r(x.result); x.readAsDataURL(f); });
-async function persistNow() {
-  try {
-    const files = {}; let size = 0;
-    for (const [p, r] of S.files) {
-      const o = r.kind === 'txt' ? { c: r.text } : { c: await toDataURL(r.file), b: 1, m: r.file.type };
-      size += o.c.length; if (size > CONFIG.maxPersistBytes) { toast('Workspace too large to fully save in browser'); break; }
-      files[p] = o;
-    }
-    localStorage.setItem(WS_KEY, JSON.stringify({ files, dirs: [...S.dirs], open: [...S.openDirs], tabs: S.tabs, cur: S.cur, repo: S.repo }));
-  } catch { toast('Could not save workspace (storage full?)'); }
+let wsReady = false, sizeWarned = false;   // stays false until the saved workspace is restored, so an empty page can't overwrite it
+const toDataURL = f => new Promise(r => { const x = new FileReader(); x.onload = () => r(x.result); x.onerror = () => r(null); x.readAsDataURL(f); });
+
+function snapshot(withBinary, limit) {
+  const files = {}; let size = 0, skipped = 0;
+  const order = [...S.files].sort((a, b) => (a[1].kind === 'txt' ? 0 : 1) - (b[1].kind === 'txt' ? 0 : 1));   // text first
+  for (const [p, r] of order) {
+    const o = r.kind === 'txt' ? (r.text !== r.orig ? { c: r.text, o: r.orig } : { c: r.text })
+      : withBinary && r.dataUrl ? { c: r.dataUrl, b: 1, m: r.file.type } : null;
+    const n = o ? o.c.length + (o.o ? o.o.length : 0) + p.length : 0;
+    if (!o || size + n > limit) { skipped++; continue; }
+    size += n; files[p] = o;
+  }
+  return { files, skipped };
+}
+function persistNow() {   // synchronous on purpose: it has to finish inside pagehide
+  if (!wsReady) return;
+  for (const [withBin, f] of [[true, 1], [false, 1], [false, .5]]) {
+    const { files, skipped } = snapshot(withBin, CONFIG.maxPersistBytes * f);
+    try {
+      localStorage.setItem(WS_KEY, JSON.stringify({ files, dirs: [...S.dirs], open: [...S.openDirs], tabs: S.tabs, cur: S.cur, repo: S.repo }));
+      if (skipped && !sizeWarned) { sizeWarned = true; toast(skipped + ' file(s) are too large to keep after a reload'); }
+      return;
+    } catch {}
+  }
+  if (!sizeWarned) { sizeWarned = true; toast('Browser storage is full: this workspace will not survive a reload'); }
 }
 const persist = debounce(persistNow, 600);
 async function restoreWorkspace() {
-  const d = store.json(WS_KEY, null); if (!d || !d.files) return;
-  S.repo = d.repo || 'Workspace'; S.dirs = new Set(d.dirs || []); S.openDirs = new Set(d.open || []);
-  for (const [p, o] of Object.entries(d.files)) {
-    let f;
-    if (o.b) { const s = atob(o.c.split(',')[1]), u = Uint8Array.from(s, c => c.charCodeAt(0)); f = new File([u], baseName(p), { type: o.m || '' }); }
-    else f = new File([o.c], baseName(p));
-    await addFile(p, f);
+  const d = store.json(WS_KEY, null);
+  if (d && d.files) {
+    S.repo = d.repo || 'Workspace'; S.dirs = new Set(d.dirs || []); S.openDirs = new Set(d.open || []);
+    for (const [p, o] of Object.entries(d.files)) {
+      try {
+        const f = o.b ? new File([Uint8Array.from(atob(o.c.split(',')[1]), c => c.charCodeAt(0))], baseName(p), { type: o.m || '' }) : new File([o.c], baseName(p));
+        await addFile(p, f);
+        if (o.o !== undefined && rec(p) && rec(p).kind === 'txt') rec(p).orig = o.o;   // keeps unsaved-edit markers
+      } catch (e) { console.error('restore skipped', p, e); }
+    }
+    S.tabs = (d.tabs || []).filter(p => rec(p)); S.cur = rec(d.cur) ? d.cur : S.tabs[0] || null;
   }
-  S.tabs = (d.tabs || []).filter(p => rec(p)); S.cur = rec(d.cur) ? d.cur : S.tabs[0] || null;
-  renderAll();
+  wsReady = true; renderAll();
 }
 addEventListener('pagehide', persistNow);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') persistNow(); });
@@ -900,10 +923,21 @@ async function ghClone(full, branch, setStatus) {
   await loadWorkspace(entries, full.split('/')[1]);   // fills the left bar, keeps the welcome name untouched
   toast(`Cloned ${full} · ${entries.length} files`);
 }
+async function ghRemoteBase(full, branch) {   // path -> blob sha, straight from the branch
+  try {
+    const t = await ghApi(`/repos/${full}/git/trees/${encodeURIComponent(branch)}?recursive=1`), base = {};
+    if (t.truncated) throw Error('Repo is too large to compare with GitHub in one request.');
+    t.tree.forEach(x => { if (x.type === 'blob') base[x.path] = x.sha; });
+    return base;
+  } catch (e) { if (e.status === 404 || e.status === 409) return {}; throw e; }   // empty repo / new branch
+}
 async function ghChanges() {
-  const now = {}, out = []; for (const p of S.files.keys()) now[p] = await gitBlobSha(await bytesOf(p));
-  for (const p in now) if (GH.base[p] !== now[p]) out.push({ p, s: GH.base[p] ? 'M' : 'A', sha: now[p] });
-  for (const p in GH.base) if (!(p in now)) out.push({ p, s: 'D' });
+  const remote = await ghRemoteBase(GH.repo, GH.branch), out = [];
+  await pool([...S.files.keys()], 6, async p => {
+    const sha = await gitBlobSha(await bytesOf(p));
+    if (remote[p] !== sha) out.push({ p, s: remote[p] ? 'M' : 'A', sha });   // new, or content differs
+  });
+  for (const p in GH.base) if (!S.files.has(p) && remote[p]) out.push({ p, s: 'D' });   // cloned earlier, deleted here
   return out.sort((a, b) => a.p.localeCompare(b.p));
 }
 async function ghPush(items, message) {
@@ -943,8 +977,7 @@ function openGit(tab = 'repos') {
       const b = e.target.closest('[data-a]'); if (!b) return; const d = b.dataset; b.disabled = true;
       try {
         if (d.a === 'mk') { const n = body.querySelector('#nrN').value.trim(); if (!n) throw Error('Repository name required'); const r = await ghApi('/user/repos', { m: 'POST', b: { name: n, private: body.querySelector('#nrP').checked } }); GH.repo = r.full_name; GH.branch = r.default_branch || 'main'; GH.base = {}; ghSave(); toast('Created ' + r.full_name); openGit('commit'); }
-        else if (d.a === 'link') { GH.repo = d.f; GH.branch = d.b; GH.base = {}; ghSave(); toast('Linked ' + d.f); openGit('commit'); }
-        else if (d.a === 'clone') { await ghClone(d.f, d.b, status); m.close(); }
+else if (d.a === 'link') { const base = await ghRemoteBase(d.f, d.b); GH.repo = d.f; GH.branch = d.b; GH.base = base; ghSave(); toast('Linked ' + d.f); openGit('commit'); }        else if (d.a === 'clone') { await ghClone(d.f, d.b, status); m.close(); }
       } catch (er) { toast(er.message); openGit('repos'); }
     };
   } else {
@@ -952,7 +985,7 @@ function openGit(tab = 'repos') {
     status('Checking changes…');
     ghChanges().then(ch => {
       body.innerHTML = `<div class="muted">Pushing to <b>${esc(GH.repo)}</b> on <b>${esc(GH.branch)}</b></div>` +
-        (ch.length ? ch.map((x, i) => `<label class="card split" style="color:var(--tx)"><span><b>${x.s}</b> ${esc(x.p)}</span><input type="checkbox" data-i="${i}" checked style="width:auto"></label>`).join('') + '<input id="cMsg" value="Update from 0x Loom" placeholder="Commit message"><button class="btn pri" data-a="push" style="align-self:flex-end">Commit &amp; push</button>' : '<div class="muted" style="padding:10px">Everything is in sync.</div>') +
+        (ch.length ? ch.map((x, i) => `<label class="card split" style="color:var(--tx)"><span><span class="muted">${{ M: 'changed', A: 'new', D: 'deleted' }[x.s]}</span> ${esc(x.p)}</span><input type="checkbox" data-i="${i}" ${x.s === 'D' ? '' : 'checked'} style="width:auto"></label>`).join('')+ '<input id="cMsg" value="Update from 0x Loom" placeholder="Commit message"><button class="btn pri" data-a="push" style="align-self:flex-end">Commit &amp; push</button>' : '<div class="muted" style="padding:10px">Everything is in sync.</div>') +
         '<button class="btn line" data-a="pull">Pull latest (replaces workspace)</button>';
       body.onclick = async e => {
         const b = e.target.closest('[data-a]'); if (!b) return; b.disabled = true;
@@ -1036,9 +1069,11 @@ const isMobileUA = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 ['bOpen', 'cOpen'].forEach(id => $(id).onclick = () => isMobileUA ? $('pickFiles').click() : pickDir());
 $('cFiles').onclick = () => $('pickFiles').click();
 $('bNew').onclick = $('cNew').onclick = () => newFile(S.sel && S.dirs.has(S.sel) ? S.sel : dirOf(S.sel || ''));
-$('bGit').onclick = $('cGit').onclick = () => openGit();
+$('cGit').onclick = () => openGit();
 $('bPub').onclick = () => openGit('commit');
 $('bSettings').onclick = openSettings; $('bPal').onclick = openPalette; $('bAi').onclick = toggleAi; $('bDl').onclick = () => downloadPath();
+$('bPub').onclick = () => openGit('commit');
+// $('bSettings').onclick = openSettings; $('bPal').onclick = openPalette; $('bAi').onclick = toggleAi; $('bDl').onclick = () => downloadPath();
 $('bSide').onclick = () => setSidebar(!$('side').classList.contains('hide')); $('scrim').onclick = () => setSidebar(true);
 $('bSearch').onclick = () => { $('filter').style.display = 'block'; $('filter').focus(); };
 $('filter').oninput = e => { S.filter = e.target.value.toLowerCase(); renderTree(); };
@@ -1760,7 +1795,7 @@ window.LOOM_PACK = [...THEMES, ...TOOLS];
 })();
 </script>
 
-<!-- ===== 0x Loom patch: paste this whole block right before </body> (after your main <script>) ===== -->
+<!-- ===== 0x Loom patch: paste this whole block right before </body> (after your main <script>) =====
 <style id="aistudio-theme">
 /* AI Studio look: white canvas, soft grey sidebar, pill buttons, big rounded prompt box */
 :root[data-theme=light]{--bg:#fff;--side:#f8f9fb;--card:#fff;--line:#e3e6ea;--hover:#eff1f4;--sel:#e6ecf5;--tx:#1f1f1f;--mut:#5f6368;--acc:#1f1f1f;--on-acc:#fff;--blue:#1a73e8}
@@ -1802,7 +1837,7 @@ input,textarea,select{border-radius:12px}
 .xp{width:380px;max-width:60vw}
 .xcard b{font-weight:500}.xcard .muted{margin-top:2px}
 @media(max-width:900px){.xp{position:absolute;inset:0;width:100%;max-width:none;z-index:12}}
-</style>
+</style> -->
 
 <script>
 /* =====================================================================
@@ -1972,10 +2007,576 @@ nb.innerHTML = '<svg viewBox="0 0 16 16"><path d="M6 2h4v3h3v4h-3v3H6V9H3V5h3z"/
 document.querySelector('.nav').appendChild(nb);
 COMMANDS.push(['Tools', 'Extensions…', () => openExt()], ['Tools', 'Extension marketplace…', () => openExt('market')], ['Tools', 'New extension…', () => { draft = null; openExt('develop'); }]);
 exts.forEach(load);
+       window.LoomExt={install,unload,get list(){return exts}};
+
 })();
 </script>
 <!-- ===== end of patch ===== -->
 
 
+<!-- ===== 0x Loom UI patch v2 =====-->
+<style id="loom-ref-ui">
+:root{--ease:cubic-bezier(.32,.72,0,1);--spring:cubic-bezier(.34,1.45,.64,1)}
+:root[data-theme=light]{--bg:#fafafa;--side:#f6f6f6;--card:#fff;--line:#e9e9e9;--hover:#eeeeee;--sel:#e8e8e8;--tx:#262626;--mut:#8c8c8c;--acc:#161616;--on-acc:#fff;--blue:#2f6fed}
+:root[data-theme=dark]{--bg:#161616;--side:#1b1b1b;--card:#202020;--line:#2c2c2c;--hover:#262626;--sel:#2e2e2e;--tx:#e8e8e8;--mut:#8e8e93;--acc:#ededed;--on-acc:#141414;--blue:#6aa6ff}
+body{font:14px/1.45 "Segoe UI",Inter,-apple-system,system-ui,sans-serif}
+.btn{transition:background .15s,color .15s,transform .15s var(--spring),opacity .15s}.btn:active{transform:scale(.96)}
+/* menubar */
+#mbar{height:34px;display:flex;align-items:center;gap:2px;padding:0 10px;background:var(--bg);border-bottom:1px solid var(--line);position:relative;z-index:30}
+#mbar .logo2{width:18px;margin-right:12px;color:var(--tx)}
+.mi{position:relative}.mi>button{height:26px;padding:0 12px;border-radius:6px;font-size:13.5px}.mi>button:hover,.mi.on>button{background:var(--hover)}
+.mdd{position:absolute;top:30px;left:0;min-width:220px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:4px;box-shadow:0 10px 32px rgba(0,0,0,.18);opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity .16s,transform .22s var(--ease)}
+.mi.on .mdd{opacity:1;transform:none;pointer-events:auto}
+.mdd button{display:flex;justify-content:space-between;width:100%;padding:6px 10px;border-radius:6px;text-align:left}.mdd button:hover{background:var(--sel)}.mdd em{font-style:normal;color:var(--mut);font-size:12px}
+#app{height:calc(100dvh - 34px)}
+/* sidebar */
+#side{width:252px;background:var(--side);border-right:1px solid var(--line);transition:margin .38s var(--ease),opacity .3s}
+#side.hide{margin-left:-252px;opacity:0}
+.logo,#legacy{display:none}
+.sbtop{display:flex;align-items:center;gap:2px;padding:10px 10px 6px}.sbtop .sp{flex:1}
+.ib{width:30px;height:28px;padding:0;justify-content:center;color:var(--mut)}.ib:hover{color:var(--tx)}
+.nav{padding:4px 8px}.nav .btn{height:36px;border-radius:9px;gap:11px;font-size:14px;color:var(--tx)}.nav .btn svg{color:var(--mut)}.nav .btn.on{background:var(--sel)}
+.sec2{display:flex;align-items:center;justify-content:space-between;padding:16px 8px 4px 14px;color:var(--mut);font-size:13px}.sec2 span.ac{display:flex;gap:2px}
+.plain{margin:0 8px;display:flex;gap:11px;align-items:center;height:34px;padding:0 10px;border-radius:9px;color:var(--mut);width:calc(100% - 16px)}.plain:hover{background:var(--hover);color:var(--tx)}
+.sec{text-transform:none;letter-spacing:0;font-size:14px;color:var(--tx);padding:2px 10px;margin:0 8px;height:34px;border-radius:9px;cursor:pointer;justify-content:flex-start;gap:11px}.sec:hover{background:var(--hover)}.sec span:first-of-type{flex:1}.sec svg{color:var(--mut)}
+#count{color:var(--mut);font-size:12px}#tree.fold{display:none}
+.row{height:30px;border-radius:8px}.row.on{background:var(--sel);font-weight:500}.row.in{animation:rin .4s var(--ease) both}
+#filter{border-radius:9px}
+.sfoot{border:0;padding:8px;gap:8px}.sfoot>.btn{display:none}
+.gs{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg);display:flex;flex-direction:column;gap:8px;animation:up .5s var(--ease) both}
+.gs .hd{display:flex;justify-content:space-between;align-items:center;color:var(--mut)}.gs svg{width:18px;height:18px}.gs circle{transition:stroke-dashoffset .7s var(--ease)}
+.gs .btn{justify-content:center;background:var(--hover);height:32px;border-radius:8px}
+.usr{display:flex;align-items:center;gap:10px;padding:4px 6px 2px}.usr b{flex:1;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.av{width:30px;height:30px;border-radius:50%;background:var(--acc);color:var(--on-acc);display:grid;place-items:center;font-size:13px;background-size:cover;flex:none}
+/* top bar */
+#top{height:44px;border:0;padding:0 8px}.tab{border:0;border-radius:8px;height:30px;margin:7px 2px;padding:0 6px 0 12px;box-shadow:none}.tab.on{background:var(--sel);box-shadow:none}
+.tab.pop{animation:pop .42s var(--spring) both}
+#side:not(.hide)~#main #bSide{display:none}
+#bPal{padding:0 8px;color:var(--mut)}#bAi,#bPub{border:0;color:var(--mut)}#bAi:hover,#bPub:hover{color:var(--tx)}#bPub{font-size:13px}
+/* welcome */
+#welcome{inset:44px 0 0 0;gap:12px}#welcome>*{animation:up .65s var(--ease) both}#welcome>:nth-child(2){animation-delay:.05s}#welcome>:nth-child(3){animation-delay:.1s}#welcome>:nth-child(5){animation-delay:.16s}
+.greet,.chips{display:none}
+.selr{display:flex;gap:4px;width:min(660px,100%);padding-left:8px}.selr .btn{height:28px;padding:0 10px;color:var(--tx);font-size:14px}.selr svg.c{width:11px;height:11px;color:var(--mut)}
+.box{width:min(660px,100%);border-radius:20px;padding:14px 14px 10px;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .3s var(--ease),border-color .3s}
+.box:focus-within{box-shadow:0 6px 28px rgba(0,0,0,.09);border-color:color-mix(in srgb,var(--mut) 45%,var(--line))}
+#ask{font-size:15.5px;min-height:46px;padding:2px 4px 0}#ask::placeholder{color:#b4b4b4}
+.bar{gap:8px}.bar .btn{color:var(--mut)}.mdl{font-size:14px}.go{width:34px;height:34px;transition:transform .25s var(--spring)}.go:hover{transform:scale(1.07)}.go:active{transform:scale(.92)}
+.pl{width:30px;height:30px;border-radius:50%;background:var(--hover);padding:0;justify-content:center}
+.chp{display:flex;gap:8px;width:min(660px,100%)}.chp .btn{border:1px solid var(--line);height:34px;padding:0 14px;color:var(--tx);font-size:14px}.chp .btn:hover{background:var(--hover)}.chp .btn.on{background:var(--acc);color:var(--on-acc)}.chp i{font-style:normal;color:var(--mut);font-size:12px;margin-left:4px}
+.hint{position:absolute;bottom:22px;left:0;right:0;text-align:center;color:var(--mut);font-size:13px}.hint code{background:var(--hover);padding:2px 7px;border-radius:6px;font:12.5px var(--mono)}
+/* editor: gutter fix + markers */
+#gut{opacity:1;cursor:pointer;color:var(--mut)}
+#gin{position:relative;white-space:pre;isolation:isolate}
+#gin .gcur{position:absolute;left:-52px;right:-12px;height:20px;background:var(--hover);z-index:-1}
+#gin .gm{position:absolute;left:-44px;width:10px;height:10px;border-radius:50%;background:var(--err);margin-top:5px;animation:pop2 .3s var(--spring)}
+#gin .gd{position:absolute;right:-9px;width:3px;height:20px;background:var(--s);border-radius:2px}
+#curline{position:absolute;left:52px;right:0;height:20px;background:color-mix(in srgb,var(--hover) 70%,transparent);pointer-events:none}
+#ed.fade,#media.fade{animation:fade .35s var(--ease)}
+/* overlays */
+.ov{animation:ovi .2s ease both;backdrop-filter:blur(3px)}.ov .mc{animation:mci .4s var(--spring) both}
+.ov.out{animation:ovo .17s ease forwards;pointer-events:none}.ov.out .mc{animation:mco .17s ease forwards}
+.mc{border-radius:16px;border:1px solid var(--line)}.mh{font-size:15px}.mc input,.mc textarea{border-radius:10px}
+.panel.on{animation:slin .42s var(--ease)}.panel{background:var(--bg)}
+#cm{animation:mci .22s var(--ease);transform-origin:top left}#sug{animation:mci .15s var(--ease)}
+#toast{transition:opacity .25s,transform .45s var(--spring)}
+.xl{width:44px;height:44px;border-radius:11px;background:var(--hover);display:grid;place-items:center;font-weight:600;color:var(--mut);background-size:cover;background-position:center;flex:none}.xl.big{width:64px;height:64px;font-size:22px}
+.rd{border-top:1px solid var(--line);margin-top:8px;padding-top:8px;font-size:13.5px;line-height:1.55;animation:fade .3s var(--ease)}.rd[hidden]{display:none}
+.rd h1,.rd h2,.rd h3{margin:10px 0 4px}.rd pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;overflow:auto;font:12px/1.5 var(--mono)}.rd code{font-family:var(--mono);background:var(--hover);padding:0 4px;border-radius:4px}.rd pre code{background:none;padding:0}.rd a{color:var(--blue)}.rd ul{padding-left:20px}
+@keyframes up{from{opacity:0;transform:translateY(14px)}}@keyframes fade{from{opacity:0}}@keyframes rin{from{opacity:0;transform:translateX(-10px)}}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.9);max-width:0}to{max-width:280px}}@keyframes pop2{from{transform:scale(0)}}
+@keyframes ovi{from{opacity:0}}@keyframes ovo{to{opacity:0}}@keyframes mci{from{opacity:0;transform:scale(.94) translateY(8px)}}@keyframes mco{to{opacity:0;transform:scale(.96) translateY(4px)}}
+@keyframes slin{from{opacity:0;transform:translateX(30px)}}
+@media(max-width:700px){#mbar{display:none}#app{height:100dvh}.hint{display:none}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id), q = (s, r = document) => r.querySelector(s);
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const sv = d => `<svg viewBox="0 0 16 16">${d}</svg>`;
+const I = {
+  chat: sv('<path d="M2.5 3h11L9.5 8v4.5l-3-1.5V8z"/>'), search: sv('<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/>'),
+  bot: sv('<rect x="2.5" y="5" width="11" height="8" rx="2"/><path d="M8 2.5V5M5.5 9h.01M10.5 9h.01"/>'), cust: sv('<rect x="2.5" y="6.5" width="5" height="7" rx="1"/><rect x="8.5" y="8.5" width="5" height="5" rx="1"/><rect x="5" y="2.5" width="5" height="3" rx="1"/>'),
+  plus: sv('<path d="M8 3v10M3 8h10"/>'), filt: sv('<path d="M2.5 4.5h11M4.5 8h7M6.5 11.5h3"/>'), fplus: sv('<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3L8 4.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/><path d="M8 7v4M6 9h4"/>'),
+  fold: sv('<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3L8 4.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>'),
+  side: sv('<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/>'), back: sv('<path d="M13 8H3M7 4 3 8l4 4"/>'), fwd: sv('<path d="M3 8h10M9 4l4 4-4 4"/>'),
+  gear: sv('<circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3"/>'),
+  gh: '<svg viewBox="0 0 16 16" style="fill:currentColor;stroke:none"><path d="M8 .2a8 8 0 0 0-2.5 15.6c.4.1.5-.2.5-.4v-1.4c-2.2.5-2.7-1-2.7-1-.4-.9-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.200 1.900.9 2.300.7.1-.5.3-.9.5-1.100-1.800-.2-3.600-.9-3.600-4 0-.9.3-1.600.8-2.100-.1-.2-.4-1 .1-2.100 0 0 .7-.2 2.200.8a7.500 7.500 0 0 1 4 0c1.500-1 2.200-.8 2.200-.8.4 1.100.2 1.900.1 2.100.5.6.8 1.300.8 2.100 0 3.100-1.900 3.700-3.600 3.900.3.3.5.8.5 1.500v2.200c0 .2.1.5.6.4A8 8 0 0 0 8 .2z"/></svg>',
+  lock: sv('<rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.500 2.500 0 0 1 5 0v2"/>'), mic: '<svg viewBox="0 0 16 16" style="fill:currentColor;stroke:none"><rect x="6" y="1.500" width="4" height="8" rx="2"/><path d="M3.500 7.500a4.500 4.500 0 0 0 9 0M8 12v2.500" style="fill:none;stroke:currentColor;stroke-width:1.400"/></svg>',
+  up: sv('<path d="M8 13V3M4 7l4-4 4 4"/>'), pc: sv('<rect x="2" y="3" width="12" height="8" rx="1.500"/><path d="M5.500 13.500h5"/>'), chev: '<svg class="c" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>',
+  panel: sv('<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M10 3v10"/>'),
+};
+const wrapFn = (n, mw) => { const o = window[n]; window[n] = function (...a) { return mw.call(this, o.bind(this), ...a); }; };
+const nav = q('.nav'), side = $('side');
+
+/* ---------- menubar ---------- */
+const MENUS = {
+  File: [['New file', () => newFile()], ['Open folder…', () => $('bOpen').click()], ['Open files…', () => $('pickFiles').click()], ['Save / Download', () => downloadPath(), 'Ctrl S'], ['Close tab', () => S.cur && closeTab(S.cur)]],
+  Edit: [['Find & replace…', () => findReplace(), 'Ctrl F'], ['Command palette…', () => openPalette(), 'Ctrl K']],
+  View: [['Toggle sidebar', () => setSidebar(!side.classList.contains('hide'))], ['Toggle theme', () => toggleTheme()], ['Toggle AI panel', () => toggleAi()]],
+  Help: [['Extensions…', () => customize.click()], ['Secrets (Tijori)…', () => openSecrets()], ['Settings…', () => openSettings()]],
+};
+const mb = el('div'); mb.id = 'mbar'; mb.innerHTML = `<svg class="logo2" viewBox="0 0 16 16" style="fill:currentColor;stroke:none"><path d="M8 1 14 4.500v7L8 15 2 11.500v-7z"/></svg>`;
+Object.entries(MENUS).forEach(([n, items]) => {
+  const m = el('div', 'mi', `<button>${n}</button><div class="mdd"></div>`), dd = q('.mdd', m);
+  items.forEach(([l, fn, k]) => { const b = el('button', '', `<span>${l}</span><em>${k || ''}</em>`); b.onclick = () => { closeMenus(); fn(); }; dd.appendChild(b); });
+  q('button', m).onclick = e => { e.stopPropagation(); const was = m.classList.contains('on'); closeMenus(); if (!was) m.classList.add('on'); };
+  m.onmouseenter = () => { if (q('.mi.on') && !m.classList.contains('on')) { closeMenus(); m.classList.add('on'); } };
+  mb.appendChild(m);
+});
+const closeMenus = () => document.querySelectorAll('.mi.on').forEach(m => m.classList.remove('on'));
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.mi')) closeMenus(); });
+document.body.prepend(mb);
+
+/* ---------- sidebar ---------- */
+const legacy = el('div'); legacy.id = 'legacy'; ['bOpen', 'bNew', 'bSearch'].forEach(i => legacy.appendChild($(i))); side.appendChild(legacy);
+const sbtop = el('div', 'sbtop', `<button class="btn ib" id="sbT">${I.side}</button><span class="sp"></span><button class="btn ib" id="sbB">${I.back}</button><button class="btn ib" id="sbF">${I.fwd}</button>`);
+side.insertBefore(sbtop, nav);
+$('sbT').onclick = () => setSidebar(true);
+const stepTab = d => { if (S.tabs.length) openFile(S.tabs[(Math.max(0, S.tabs.indexOf(S.cur)) + d + S.tabs.length) % S.tabs.length]); };
+$('sbB').onclick = () => stepTab(-1); $('sbF').onclick = () => stepTab(1);
+$('bSide').innerHTML = I.side;
+const item = (ic, label, fn) => { const b = el('button', 'btn', ic + label); b.onclick = fn; return b; };
+const newChat = item(I.chat, 'New Chat', () => { S.cur = null; renderAll(); $('ask').focus(); });
+const searchB = item(I.search, 'Search', () => { $('filter').style.display = 'block'; $('filter').focus(); });
+const autoB = item(I.bot, 'Automations', () => openPalette());
+nav.prepend(newChat, searchB, autoB);
+const customize = [...nav.children].find(b => b.textContent.trim() === 'Extensions') || item('', '', () => {});
+customize.innerHTML = I.cust + 'Customize'; autoB.after(customize);
+
+const repoSec = q('.sec'), proj = el('div', 'sec2', `<span>Projects</span><span class="ac"><button class="btn ib" id="pjA">${I.plus}</button></span>`);
+const newProj = item(I.plus, 'New Project', () => $('bOpen').click()); newProj.className = 'btn plain';
+const repoHd = el('div', 'sec2', `<span>Repositories</span><span class="ac"><button class="btn ib" id="rpF">${I.filt}</button><button class="btn ib" id="rpN">${I.fplus}</button></span>`);
+nav.after(proj, newProj, repoHd); repoHd.after(repoSec);
+repoSec.insertAdjacentHTML('afterbegin', I.fold); repoSec.onclick = () => $('tree').classList.toggle('fold');
+$('pjA').onclick = () => $('bOpen').click(); $('rpF').onclick = () => searchB.click(); $('rpN').onclick = () => openGit('repos');
+
+const foot = q('.sfoot'), gs = el('div', 'gs'), usr = el('div', 'usr');
+foot.append(gs, usr);
+usr.innerHTML = `<span class="av" id="avt"></span><b id="unm"></b><button class="btn ib" id="usG">${I.gear}</button>`; $('usG').onclick = () => openSettings();
+function updSide() {
+  const st = [S.files.size > 0, !!(GH && GH.token), !!(store.get('vk_tj') || store.get('vk_gkeys'))], n = st.filter(Boolean).length, C = 2 * Math.PI * 7;
+  gs.style.display = n === 3 ? 'none' : 'flex';
+  gs.innerHTML = `<div class="hd"><span>Getting Started</span><span>${n}/3 <svg viewBox="0 0 18 18" style="display:inline;vertical-align:-4px"><circle cx="9" cy="9" r="7" stroke="var(--line)" stroke-width="2"/><circle cx="9" cy="9" r="7" stroke="#4cb7a5" stroke-width="2" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - n / 3)}" transform="rotate(-90 9 9)"/></svg></span></div><button class="btn" id="gsB">${I.gh}${GH && GH.token ? 'GitHub · ' + esc(GH.user.login) : 'Connect GitHub'}</button>`;
+  $('gsB').onclick = () => openGit();
+  const nm = store.get('vcloud_username') || 'User'; $('unm').textContent = nm;
+  const a = $('avt'); a.textContent = GH && GH.user ? '' : nm[0].toUpperCase(); a.style.backgroundImage = GH && GH.user ? `url(${GH.user.avatar_url})` : '';
+  newChat.classList.toggle('on', !S.cur); const rb = $('repoBtn'); if (rb) rb.firstChild.textContent = S.repo || 'No folder';
+}
+
+/* ---------- top bar + welcome ---------- */
+$('bPal').innerHTML = '···'; $('bAi').innerHTML = I.panel; $('bAi').className = 'btn ghost ib'; $('bPub').textContent = 'Publish ↗'; $('bPub').className = 'btn ghost';
+const w = $('welcome'), drop = $('drop'), ask = $('ask'), bar = q('.bar', drop);
+const selr = el('div', 'selr', `<button class="btn" id="repoBtn">${esc(S.repo || 'No folder')}${I.chev}</button><button class="btn" id="srcBtn">${I.pc}This PC${I.chev}</button>`);
+w.insertBefore(selr, drop); $('repoBtn').onclick = () => $('bOpen').click(); $('srcBtn').onclick = () => openGit('repos');
+ask.placeholder = 'Plan, Build, / for skills, @ for context';
+// bar.innerHTML = `<button class="btn pl" id="atB">${I.plus}</button><button class="btn mdl" id="mdB"></button>`; bar.appendChild($('bGo'));
+// $('atB').onclick = () => $('pickFiles').click(); $('mdB').onclick = () => aiSettings();
+const syncGo = () => { $('bGo').innerHTML = ask.value.trim() ? I.up : I.mic; const m = $('mdB'); if (m) m.innerHTML = esc(aiModel()) + ' ' + I.lock; };
+let plan = false;
+const planB = el('button', 'btn', 'Plan New Idea<i>⇧Tab</i>'), multiB = el('button', 'btn', 'Multitask'), chp = el('div', 'chp');
+chp = el('div', 'chp');
+chp.append(planB, multiB); w.appendChild(chp); w.appendChild(el('div', 'hint', 'Hooks let you control and extend the agent loop - press <code>⌘K</code> to get started'));
+const setPlan = v => { plan = v; planB.classList.toggle('on', v); ask.placeholder = v ? 'Describe the idea to plan…' : 'Plan, Build, / for skills, @ for context'; };
+planB.onclick = () => setPlan(!plan); multiB.onclick = () => toggleAi();
+const send = () => { const v = ask.value.trim(); if (!v) return $('bOpen').click(); ask.value = ''; syncGo(); aiSend(plan ? 'Plan only, step by step, no edit blocks: ' + v : v); setPlan(false); };
+$('bGo').onclick = send; ask.oninput = syncGo;
+ask.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } else if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); setPlan(!plan); } };
+syncGo();
+
+/* ---------- animations hooks ---------- */
+let prevRows = new Set(), curRows = new Set(), rowN = 0;
+wrapFn('treeRow', (o, p, ...a) => { const r = o(p, ...a); curRows.add(p); if (!prevRows.has(p)) { r.classList.add('in'); r.style.animationDelay = Math.min(rowN++ * 14, 320) + 'ms'; } return r; });
+wrapFn('renderTree', o => { curRows = new Set(); rowN = 0; o(); prevRows = curRows; });
+let seenTabs = new Set();
+wrapFn('renderTabs', o => { o(); [...$('tabs').children].forEach((t, i) => { if (!seenTabs.has(S.tabs[i])) t.classList.add('pop'); }); seenTabs = new Set(S.tabs); });
+let lastCur = null;
+wrapFn('renderAll', o => { o(); updSide(); if (S.cur !== lastCur) { lastCur = S.cur; [$('ed'), $('media')].forEach(e => { e.classList.remove('fade'); void e.offsetWidth; e.classList.add('fade'); }); } markers(); });
+wrapFn('ghSave', o => { o(); updSide(); });
+new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+  if (!(n instanceof HTMLElement) || !n.classList.contains('ov') || n._p) return; n._p = 1;
+  const r = n.remove.bind(n); n.remove = () => { if (n.classList.contains('out')) return; n.classList.add('out'); setTimeout(r, 170); };
+  if (q('.mh b', n)?.textContent === 'Extensions' && q('[data-t="market"].pri', n)) { n.remove(); openStore(); }
+}))).observe(document.body, { childList: true });
+
+/* ---------- editor: one number per line, markers, active line ---------- */
+const ta2 = $('ta'), MK = store.json('loom_marks', {}); let dcache = { o: null, s: null };
+const curLine = el('div'); curLine.id = 'curline'; $('ed').insertBefore(curLine, $('hl'));
+function markers() {
+  const g = $('gin'), r = S.cur && rec(S.cur); if (!r || r.kind !== 'txt') { curLine.style.display = 'none'; return; }
+  const c = ta2.value.slice(0, ta2.selectionStart).split('\n').length; let h = `<i class="gcur" style="top:${(c - 1) * 20}px"></i>`;
+  (MK[S.cur] || []).forEach(l => h += `<i class="gm" style="top:${(l - 1) * 20}px"></i>`);
+  const ls = ta2.value.split('\n');
+  if (ls.length < 8000) { if (dcache.o !== r.orig) dcache = { o: r.orig, s: new Set(r.orig.split('\n')) }; ls.forEach((t, i) => { if (!dcache.s.has(t)) h += `<i class="gd" style="top:${i * 20}px"></i>`; }); }
+  let box = g.querySelector('.mk'); if (!box) { box = el('div', 'mk'); g.appendChild(box); } box.innerHTML = h;
+  curLine.style.display = 'block'; curLine.style.top = 12 + (c - 1) * 20 - ta2.scrollTop + 'px';
+}
+const op = window.paint; window.paint = function () { op.apply(this, arguments); markers(); };
+['keyup', 'click', 'focus', 'scroll'].forEach(e => ta2.addEventListener(e, markers));
+$('gut').addEventListener('mousedown', e => {
+  if (!S.cur) return; const l = Math.floor((e.clientY - $('gut').getBoundingClientRect().top - 12 + ta2.scrollTop) / 20) + 1;
+  if (l < 1 || l > ta2.value.split('\n').length) return; const a = MK[S.cur] ||= [], i = a.indexOf(l); i < 0 ? a.push(l) : a.splice(i, 1);
+  store.set('loom_marks', JSON.stringify(MK)); markers();
+});
+
+/* ---------- pre-installed extensions ---------- */
+const PRE = ['code-map', 'quick-open', 'workspace-grep', 'outline', 'todo-scanner', 'diff-view', 'snippets', 'bookmarks', 'json-tools', 'case-converter', 'line-move', 'font-zoom', 'text-stats', 'regex-tester', 'tab-tools'];
+(async () => {
+  if (!window.LoomExt) return console.warn('Add window.LoomExt=… inside the extensions IIFE (see patch header)');
+  if (store.get('loom_seed1')) return; store.set('loom_seed1', '1');
+  for (const id of PRE) { const x = (window.LOOM_PACK || []).find(e => e.id === id); if (x && !LoomExt.list.some(e => e.id === id)) await LoomExt.install(x); }
+})();
+
+/* ---------- marketplace + publishing (Supabase) ---------- */
+const REG = CONFIG.supabaseUrl + '/rest/v1/', HD = { apikey: CONFIG.supabaseAnon, Authorization: 'Bearer ' + CONFIG.supabaseAnon, 'Content-Type': 'application/json' };
+const rpc = async (n, b) => { const r = await fetch(REG + 'rpc/' + n, { method: 'POST', headers: HD, body: JSON.stringify(b) }), j = await r.json().catch(() => ({})); if (!r.ok) throw Error(j.message || n + ' failed (' + r.status + ')'); return j; };
+const key = () => { let t = store.get('loom_pub_key'); if (!t) { t = [...crypto.getRandomValues(new Uint8Array(24))].map(b => b.toString(16).padStart(2, '0')).join(''); store.set('loom_pub_key', t); } return t; };
+const md = s => {
+  let out = '', ul = false; const inl = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  String(s || '').split(/```[\w-]*\n?/).forEach((part, i) => {
+    if (i % 2) { out += '<pre><code>' + esc(part.replace(/\n$/, '')) + '</code></pre>'; return; }
+    part.split('\n').forEach(l => { const h = l.match(/^(#{1,3})\s+(.*)/), li = l.match(/^\s*[-*]\s+(.*)/);
+      if (li) { if (!ul) out += '<ul>'; ul = true; out += '<li>' + inl(li[1]) + '</li>'; return; } if (ul) { out += '</ul>'; ul = false; }
+      out += h ? `<h${h[1].length}>${inl(h[2])}</h${h[1].length}>` : l.trim() ? '<p style="margin:4px 0">' + inl(l) + '</p>' : ''; });
+    if (ul) { out += '</ul>'; ul = false; }
+  }); return out;
+};
+const logoCss = x => x.logo ? `style="background-image:url('${x.logo.replace(/['"()\\]/g, '')}')"` : '';
+async function openStore() {
+  const m = modal('Marketplace', 'min(760px,96vw)'), B = m.body; B.innerHTML = '<input id="sq" placeholder="Search extensions…"><div id="sl" class="muted" style="padding:14px">Loading…</div>';
+  let list = [];
+  const draw = () => {
+    const s = B.querySelector('#sq').value.toLowerCase(), inst = id => LoomExt.list.some(e => e.id === id);
+    B.querySelector('#sl').innerHTML = list.filter(x => (x.name + x.description + x.author).toLowerCase().includes(s)).map(x => `<div class="card xcard" data-id="${esc(x.id)}" style="margin-bottom:8px"><div class="split"><span class="xl" ${logoCss(x)}>${x.logo ? '' : esc(x.name[0] || '?')}</span><span style="flex:1;min-width:0"><b>${esc(x.name)}</b> <span class="muted">v${esc(x.version || '1.0.0')} · ${esc(x.author || '')}${x.installs ? ' · ' + x.installs + ' installs' : ''}</span><div class="muted">${esc(x.description || '')}</div></span><span class="ac"><button class="btn line" data-a="rd">README</button>${inst(x.id) ? '<span class="muted">Installed</span>' : '<button class="btn pri" data-a="in">Install</button>'}</span></div><div class="rd" hidden></div></div>`).join('') || '<div class="muted">Nothing found.</div>';
+  };
+  B.onclick = async e => {
+    const b = e.target.closest('[data-a]'); if (!b) return; const c = b.closest('.xcard'), x = list.find(y => y.id === c.dataset.id);
+    if (b.dataset.a === 'rd') { const r = q('.rd', c); r.innerHTML = md(x.readme || x.description || 'No README.'); r.hidden = !r.hidden; }
+    else if (await dialog({ title: 'Install ' + x.name + '?', msg: 'Extensions are JavaScript with full access to your files, vault secrets and GitHub token. Only install code you trust.', ok: 'Install' })) {
+      await LoomExt.install({ id: x.id, name: x.name, description: x.description, author: x.author, version: x.version, code: x.code, logo: x.logo }); toast('Installed ' + x.name);
+      if (x.remote) rpc('extension_installed', { p_id: x.id }).catch(() => {}); draw();
+    }
+  };
+  B.querySelector('#sq').oninput = draw;
+  let rem = []; try { const r = await fetch(REG + 'extensions?select=*&order=installs.desc,updated_at.desc&limit=200', { headers: HD }); const j = await r.json(); if (Array.isArray(j)) rem = j.map(x => ({ ...x, remote: 1 })); } catch {}
+  const bi = (window.LOOM_PACK || []).filter(x => !rem.some(r => r.id === x.id)); list = [...rem, ...bi]; draw();
+}
+const toLogo = f => new Promise((ok, no) => { const u = URL.createObjectURL(f), i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const s = Math.min(i.naturalWidth, i.naturalHeight) || 128; c.getContext('2d').drawImage(i, (i.naturalWidth - s) / 2, (i.naturalHeight - s) / 2, s, s, 0, 0, 128, 128); URL.revokeObjectURL(u); ok(c.toDataURL('image/webp', .88)); }; i.onerror = () => no(Error('Unreadable image')); i.src = u; });
+function openPublish(x) {
+  const mk = 'loom_pm:' + x.id, meta = store.json(mk, { version: x.version || '1.0.0', readme: '', logo: x.logo || '', description: x.description || '' });
+  const m = modal('Publish “' + x.name + '”', 'min(620px,96vw)'), B = m.body, g = s => B.querySelector(s);
+  B.innerHTML = `<div class="split" style="justify-content:flex-start;gap:14px"><div class="xl big" id="pl"></div><div><button class="btn line" id="pLb">Choose logo…</button><div class="muted">PNG, JPG or SVG · resized to 128×128</div></div><input type="file" id="pLf" accept="image/*" hidden></div>
+  <div class="grid2" style="border:0"><label>Name<input id="pN"></label><label>Version<input id="pV"></label></div><label>Description<input id="pD" maxlength="300"></label>
+  <div class="split"><b>README</b><span><button class="btn line" id="pUp">Upload .md</button> <button class="btn line" id="pPv">Preview</button></span><input type="file" id="pRf" accept=".md,.markdown,.txt,text/*" hidden></div>
+  <textarea id="pR" style="min-height:170px;font:12.5px/1.5 var(--mono)" placeholder="# What it does…"></textarea><div class="rd" id="pRp" hidden></div><div class="er" id="pE"></div>
+  <div class="split"><span class="muted">Publisher key lives in this browser <button class="btn ghost" id="pK" style="height:22px">Copy key</button></span><span><button class="btn danger" id="pX">Unpublish</button> <button class="btn pri" id="pGo">Publish</button></span></div>`;
+  g('#pN').value = x.name; g('#pV').value = meta.version; g('#pD').value = meta.description; g('#pR').value = meta.readme;
+  const showLogo = () => { const p = g('#pl'); p.style.backgroundImage = meta.logo ? `url('${meta.logo.replace(/['"()\\]/g, '')}')` : ''; p.textContent = meta.logo ? '' : (x.name[0] || '?'); }; showLogo();
+  g('#pLb').onclick = () => g('#pLf').click();
+  g('#pLf').onchange = async e => { try { meta.logo = await toLogo(e.target.files[0]); showLogo(); } catch (er) { g('#pE').textContent = er.message; } };
+  g('#pUp').onclick = () => g('#pRf').click();
+  g('#pRf').onchange = async e => { const f = e.target.files[0]; if (f) g('#pR').value = (await f.text()).slice(0, 100000); };
+  g('#pPv').onclick = () => { const p = g('#pRp'); p.innerHTML = md(g('#pR').value); p.hidden = !p.hidden; };
+  g('#pK').onclick = () => navigator.clipboard.writeText(key()).then(() => toast('Publisher key copied — keep it safe'), () => toast('Copy blocked'));
+  const run = async fn => { g('#pE').textContent = ''; try { await fn(); } catch (er) { g('#pE').textContent = er.message; } };
+  g('#pGo').onclick = () => run(async () => {
+    Object.assign(meta, { version: g('#pV').value.trim() || '1.0.0', readme: g('#pR').value, description: g('#pD').value.trim() }); store.set(mk, JSON.stringify(meta));
+    if (!(await dialog({ title: 'Publish publicly?', msg: 'The code, logo and README become visible and installable by everyone.', ok: 'Publish' }))) return;
+    await rpc('publish_extension', { p_id: x.id, p_name: g('#pN').value.trim(), p_version: meta.version, p_description: meta.description, p_author: x.author || (typeof GH !== 'undefined' && GH && GH.user && GH.user.login) || 'anonymous', p_code: x.code, p_logo: meta.logo || '', p_readme: meta.readme, p_token: key() });
+    toast('Published to marketplace'); m.close();
+  });
+  g('#pX').onclick = () => run(async () => { if (!(await dialog({ title: 'Unpublish?', msg: 'Removes it from the marketplace.', ok: 'Unpublish', danger: true }))) return; await rpc('unpublish_extension', { p_id: x.id, p_token: key() }); toast('Unpublished'); m.close(); });
+}
+document.addEventListener('click', e => {
+  const p = e.target.closest('.mc [data-a="pub"]');
+  if (p && window.LoomExt) { e.stopPropagation(); e.preventDefault(); const x = LoomExt.list[+p.dataset.i]; if (x) openPublish(x); return; }
+  const t = e.target.closest('.mc [data-t="market"]'), ov = t && t.closest('.ov');
+  if (ov && window.LoomExt && q('.mh b', ov).textContent === 'Extensions') { e.stopPropagation(); e.preventDefault(); ov.remove(); openStore(); }
+}, true);
+
+updSide(); markers();
+})();
+</script>
+<!-- ===== end of 0x Loom UI patch v2 ===== -->
+
+
+<!-- ===== 0x Loom patch: nebula background + "Build with AI" extension generator =====
+     Paste right before </body>, AFTER loom-ui-patch.html. No other edits needed. -->
+<script>
+/* ---------------------------------------------------------------
+   1. GOLD DUST NEBULA  (WebGL, shows only while the chat/welcome page is open)
+   Gold plume enters from the right edge at mid-height, tapers like a rocket trail,
+   and dissolves into the dark at ~60% of the editor width. Bends toward the cursor.
+   --------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------
+   2. "BUILD WITH AI" in Extensions → Develop
+   EXT_SYS below is the system prompt that teaches Gemini how Loom extensions work.
+   --------------------------------------------------------------- */
+(() => {
+const EXT_SYS = `You write extensions for "0x Loom", a browser code editor. Reply with ONE \`\`\`js code block and nothing else.
+The first two lines of the code must be comments:  // name: <short name>   and   // description: <one sentence>.
+
+RUNTIME
+- The code is the BODY of an async function with two variables in scope: Loom (the API) and ext (metadata {id,name,...}). await works. No import/export, no require, no external scripts, no <script> tags.
+- Optionally end with: return { deactivate(){ ... } }  to clean up anything you created outside Loom.*.
+- Everything registered through Loom.* (commands, panels, buttons, css, event listeners, key handlers, wraps) is removed automatically when the extension is disabled. Raw document/window listeners, timers and intervals are NOT: remove them in deactivate.
+- Never use localStorage directly: use Loom.store. Always escape untrusted text put into innerHTML with Loom.ui.esc().
+
+API
+Loom.ui.toast(msg) · .modal(title,width?) -> {body,close,ov} · .dialog({title,msg,fields:[{key,label,val,type}],ok,danger}) -> Promise of {key:value} | true | null
+Loom.ui.esc(str) · .css(cssText) · .vars({bg:'#111',acc:'#fc0'}) sets CSS variables (without the --)
+Loom.ui.command(group,name,fn) adds an entry to the command palette (Ctrl/Cmd+K)
+Loom.ui.sidebarButton(label,fn) · .topButton(label,fn) · .statusItem(text) -> {el,set(text)} · .contextMenu(label,fn(path,isDir),when?(path,isDir)) for the file-tree right-click menu
+Loom.ui.panel({title,render(body,el),width}) -> {el,body,open(),close(),toggle()} a right-hand side panel
+Loom.ui.theme() toggles light/dark · .sidebar(hidden:boolean)
+Loom.editor.get() full text · .set(text) · .selection() · .insert(text) replaces the selection · .path() current file path · .transform(fn(text)=>text) applies to the selection, or the whole file if nothing is selected · .edit(start,end,text,caretPos?) · .el the <textarea> · .addWords(group,[words]) autocomplete (groups: js py css html) · .onKey(e=>boolean) return true to consume the key
+Loom.fs.list() all file paths · .dirs() · .read(path) text or undefined · .bytes(path) · .write(path,text) async, creates or overwrites · .edit(path,search,replace) async · .open(path) · .rename(a,b) · .remove(path) · .mkdir(path) · .current() · .dirty(path)
+Loom.ai.send(prompt) sends a message to the chat panel (the model can answer with edit blocks) · .ask(prompt) -> Promise<string> · .stream(prompt,onToken,signal) · .addContext(async text=>string) · .history()
+Loom.backend.python(code) -> Promise<{output,error}> · .fetch(url,opts) · .supabase(path,opts) · .github(path,{m,b}) GitHub REST · .preview.run(path) · .console(text,'err'|'warn'|'')
+Loom.store.get(key) / .set(key,value) JSON persistence private to this extension
+Loom.on(event,fn) with events: file:open(path) file:change(path) file:save(path) workspace:load ai:send(text) run(path); Loom.emit(event,...args)
+Loom.wrap(globalFnName,(original,...args)=>...) wraps an app function; Loom.eval(code) runs in global scope
+Loom.internals gives {S (state: S.files Map, S.tabs, S.cur), rec(path), ta, CONFIG, COMMANDS, store}
+
+STYLING: use the app's CSS variables (--bg --side --card --line --hover --sel --tx --mut --acc --on-acc --blue --err --warn --s --k --mono) and classes (.btn .btn.pri .btn.line .btn.ghost .btn.danger .card .muted .er .row .split .grid2 .ac) so it matches light and dark themes.
+
+STYLE OF ANSWER: small, readable, defensive (try/catch around parsing and network calls), give every command a clear group and name, show feedback with Loom.ui.toast. If CURRENT CODE is provided, modify it according to the request and return the complete updated code.`;
+
+const AF = Object.getPrototypeOf(async function () {}).constructor;
+const q = (s, r = document) => r.querySelector(s);
+async function generate(req, cur, err) {
+  const keys = await Loom.ai.keys(); if (!keys.length) throw Error('No Gemini keys found. Check the ⚙ in the AI panel.');
+  const text = 'REQUEST:\n' + req + (cur ? '\n\nCURRENT CODE:\n' + cur : '') + (err ? '\n\nYour previous attempt had this syntax error, fix it: ' + err : '');
+  let last;
+  for (const k of keys) {
+    try {
+      const r = await fetch(CONFIG.geminiBase + Loom.ai.model() + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: EXT_SYS }] }, contents: [{ role: 'user', parts: [{ text }] }], generationConfig: { temperature: .3, maxOutputTokens: 8192 } }) });
+      const j = await r.json(); if (!r.ok) throw Error((j.error && j.error.message) || 'HTTP ' + r.status);
+      const t = j.candidates[0].content.parts.filter(p => !p.thought).map(p => p.text || '').join(''), m = t.match(/```(?:js|javascript)?\n([\s\S]*?)```/);
+      return (m ? m[1] : t).trim();
+    } catch (e) { last = e; }
+  }
+  throw last;
+}
+function inject(B) {
+  if (q('.aigen', B) || !q('#dc', B)) return;
+  const box = document.createElement('div'); box.className = 'card aigen'; box.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+  box.innerHTML = '<b>✨ Build with AI</b><textarea rows="2" placeholder="Describe it: “a panel that lists all TODOs and a command that sorts lines by length”"></textarea><div class="split"><span class="muted"></span><button class="btn pri">Generate</button></div>';
+  B.insertBefore(box, q('#dn', B));
+  const ta = q('textarea', box), st = q('.muted', box), go = q('button', box);
+  go.onclick = async () => {
+    const req = ta.value.trim(); if (!req) return; go.disabled = true; st.textContent = 'Thinking…';
+    const dc = q('#dc', B), cur = /Say hello/.test(dc.value) ? '' : dc.value;
+    try {
+      let code = await generate(req, cur);
+      try { new AF('Loom', 'ext', code); } catch (e) { st.textContent = 'Fixing a syntax error…'; code = await generate(req, cur, e.message); new AF('Loom', 'ext', code); }
+      dc.value = code; const nm = code.match(/^\/\/\s*name:\s*(.+)$/m), ds = code.match(/^\/\/\s*description:\s*(.+)$/m);
+      if (nm && !q('#dn', B).value.trim()) q('#dn', B).value = nm[1].trim(); if (ds && !q('#dd', B).value.trim()) q('#dd', B).value = ds[1].trim();
+      st.textContent = 'Done. Review the code, then Install & run.';
+    } catch (e) { st.textContent = e.message; }
+    go.disabled = false;
+  };
+}
+new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+  if (!(n instanceof HTMLElement) || !n.classList.contains('ov') || !q('.mh b', n) || q('.mh b', n).textContent !== 'Extensions') return;
+  const B = q('.mb', n); new MutationObserver(() => inject(B)).observe(B, { childList: true }); inject(B);
+}))).observe(document.body, { childList: true });
+COMMANDS.push(['AI', 'Build extension with AI…', () => {
+  const b = [...document.querySelectorAll('.nav .btn')].find(x => /Customize|Extensions/.test(x.textContent)); if (!b) return; b.click();
+  setTimeout(() => { const d = q('.mc [data-t="develop"]'); d && d.click(); }, 40);
+}]);
+})();
+</script>
+<!-- ===== end nebula + AI extension patch ===== -->
+
+<!-- ===== 0x Loom patch v3: paste right before </body>, after the last patch ===== -->
+<style id="loom-v3">
+*,*::before,*::after{font-weight:400!important}
+b,strong,h1,h2,h3{font-weight:400!important}
+/* scrollable, device-capped bars */
+#top,#mbar,.chp,.selr,.chips,.grid2,.xseg{overflow-x:auto;scrollbar-width:none;max-width:100dvw}
+#top::-webkit-scrollbar,#mbar::-webkit-scrollbar,.chp::-webkit-scrollbar,.selr::-webkit-scrollbar,.xseg::-webkit-scrollbar{display:none}
+#mbar{flex-wrap:nowrap}.mi{flex:none}
+#tree,#aib,.mb,#cout,.xpb,#xl,#xview{overflow-y:auto;max-height:100dvh}
+.mdd{max-height:calc(100dvh - 60px);overflow:auto}
+#side,#xside,.panel,.mc{max-height:100dvh;max-width:100dvw}
+#tabs{max-width:100dvw}
+/* sidebar: no profile, visible GitHub button */
+.usr,.gs{display:none!important}
+.sfoot{padding:8px}
+#ghBtn{display:flex!important;width:100%;height:36px;justify-content:center;border-radius:9px;gap:9px}
+#ghBtn svg{width:16px;height:16px;fill:currentColor;stroke:none}
+/* welcome text */
+#wtxt{font:34px/1.2 'Geist Pixel',var(--mono);letter-spacing:-.5px;text-align:center;margin-bottom:6px}
+/* extensions sidebar (VS Code style) */
+#xside{width:300px;background:var(--side);border-right:1px solid var(--line);display:none;flex-direction:column;flex:none}
+#xside.on{display:flex;animation:slin .3s var(--ease)}
+.xh{display:flex;align-items:center;gap:2px;padding:10px 10px 4px;color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.6px}.xh span{flex:1}
+#xq{margin:4px 10px;width:calc(100% - 20px)}
+.xseg{display:flex;gap:4px;padding:4px 10px}.xseg .btn{height:26px;font-size:12.5px;flex:none}
+#xl{flex:1;padding:4px 6px 10px}
+.xi{display:flex;gap:10px;padding:8px;border-radius:8px;cursor:pointer;align-items:flex-start}.xi:hover{background:var(--hover)}.xi.on{background:var(--sel)}
+.xi .xl{width:38px;height:38px;border-radius:8px;font-size:15px}
+.xi .tx{flex:1;min-width:0}.xi .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xi .ds{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xi .bt{height:22px;padding:0 9px;font-size:12px;border:1px solid var(--line);margin-top:2px}
+.xtab{gap:8px}
+#xview{position:absolute;inset:44px 0 0 0;display:none;padding:28px max(16px,calc((100% - 760px)/2));overflow:auto}
+.xvh{display:flex;gap:16px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:8px}
+.xvt{font-size:22px}.xva{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.xvb{border:0;font-size:14px}.xvb img{max-width:100%}
+.xmeta{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.xmeta .xl{width:36px;height:36px}
+@media(max-width:900px){#xside{position:absolute;height:100%;z-index:15;width:min(320px,88vw)}#xview{inset:44px 0 0 0}}
+@media(max-width:700px){#wtxt{font-size:24px}#xview{padding:18px 14px}.xvh{flex-direction:column}}
+</style>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id), q = (s, r = document) => r.querySelector(s);
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const wrapFn = (n, mw) => { const o = window[n]; window[n] = function (...a) { return mw.call(this, o.bind(this), ...a); }; };
+
+/* theme default */
+if (!store.get('vk_theme')) document.documentElement.dataset.theme = 'dark';
+
+/* welcome text */
+const wt = el('div'); wt.id = 'wtxt';
+wt.textContent = 'Welcome, ' + ((store.get('vcloud_username') || 'User').trim() || 'User');
+$('welcome').prepend(wt);
+
+/* GitHub button */
+const gb = el('button', 'btn line'); gb.id = 'ghBtn'; q('.sfoot').prepend(gb);
+const GHI = '<svg viewBox="0 0 16 16"><path d="M8 .2a8 8 0 0 0-2.5 15.6c.4.1.5-.2.5-.4v-1.4c-2.2.5-2.7-1-2.7-1-.4-.9-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.2 1.9.9 2.3.7.1-.5.3-.9.5-1.1-1.8-.2-3.6-.9-3.6-4 0-.9.3-1.6.8-2.1-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.500 7.500 0 0 1 4 0c1.500-1 2.200-.8 2.200-.8.4 1.100.2 1.900.1 2.100.5.600.8 1.300.8 2.100 0 3.100-1.900 3.700-3.600 3.900.3.3.5.8.5 1.500v2.200c0 .2.1.5.6.4A8 8 0 0 0 8 .2z"/></svg>';
+const updGh = () => { const t = GH && GH.token ? 'GitHub · ' + GH.user.login : 'Connect GitHub'; if (gb.dataset.t !== t) { gb.dataset.t = t; gb.innerHTML = GHI + esc(t); } };
+gb.onclick = () => openGit(); updGh(); setInterval(updGh, 1500);
+
+/* ---------- markdown ---------- */
+const md = s => {
+  let out = '', ul = false;
+  const inl = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  String(s || '').split(/```[\w-]*\n?/).forEach((part, i) => {
+    if (i % 2) { out += '<pre><code>' + esc(part.replace(/\n$/, '')) + '</code></pre>'; return; }
+    part.split('\n').forEach(l => {
+      const h = l.match(/^(#{1,3})\s+(.*)/), li = l.match(/^\s*[-*]\s+(.*)/);
+      if (li) { if (!ul) out += '<ul>'; ul = true; out += '<li>' + inl(li[1]) + '</li>'; return; }
+      if (ul) { out += '</ul>'; ul = false; }
+      out += h ? `<h${h[1].length}>${inl(h[2])}</h${h[1].length}>` : l.trim() ? '<p style="margin:6px 0">' + inl(l) + '</p>' : '';
+    });
+    if (ul) { out += '</ul>'; ul = false; }
+  });
+  return out;
+};
+
+/* ---------- extension data ---------- */
+const HD = { apikey: CONFIG.supabaseAnon, Authorization: 'Bearer ' + CONFIG.supabaseAnon };
+let market = null; const known = new Map();
+async function getMarket() {
+  if (market) return market; let rem = [];
+  try { const j = await (await fetch(CONFIG.supabaseUrl + '/rest/v1/extensions?select=*&order=installs.desc,updated_at.desc&limit=200', { headers: HD })).json(); if (Array.isArray(j)) rem = j; } catch {}
+  const ids = new Set(rem.map(r => r.id));
+  return market = [...rem, ...(window.LOOM_PACK || []).filter(x => !ids.has(x.id))];
+}
+const sync = () => [...(market || []), ...LoomExt.list].forEach(x => known.set(x.id, { ...(known.get(x.id) || {}), ...x }));
+const persistExt = () => store.set('loom_ext_v1', JSON.stringify(LoomExt.list));
+const logo = (x, c = '') => `<span class="xl ${c}" ${x.logo ? `style="background-image:url('${String(x.logo).replace(/['"()\\]/g, '')}')"` : ''}>${x.logo ? '' : esc((x.name || '?')[0])}</span>`;
+async function installExt(x) {
+  if (!await dialog({ title: 'Install ' + x.name + '?', msg: 'Extensions are JavaScript with full access to your files, vault secrets and GitHub token. Only install code you trust.', ok: 'Install' })) return;
+  const { id, name, description, author, version, code, logo: lg, readme } = x;
+  await LoomExt.install({ id, name, description, author, version, code, logo: lg, readme }); toast('Installed ' + name);
+}
+
+/* ---------- extensions sidebar ---------- */
+const xs = el('aside'); xs.id = 'xside';
+xs.innerHTML = `<div class="xh"><span>Extensions</span><button class="btn ghost" id="xN" title="Develop new extension">+</button><button class="btn ghost" id="xC" title="Back to explorer">×</button></div><input id="xq" placeholder="Search extensions…"><div class="xseg"><button class="btn pri" data-s="inst">Installed</button><button class="btn line" data-s="mkt">Marketplace</button></div><div id="xl"></div>`;
+$('side').after(xs);
+let seg = 'inst', term = '';
+async function drawList() {
+  const L = $('xl'); if (seg === 'mkt') L.innerHTML = '<div class="muted" style="padding:12px">Loading…</div>';
+  const list = seg === 'inst' ? LoomExt.list : await getMarket(); sync();
+  const rows = list.filter(x => (x.name + (x.description || '') + (x.author || '')).toLowerCase().includes(term));
+  L.innerHTML = rows.map(x => { const k = known.get(x.id) || x, inst = LoomExt.list.some(e => e.id === x.id);
+    return `<div class="xi ${xvOn && xvId === x.id ? 'on' : ''}" data-id="${esc(x.id)}">${logo(k)}<div class="tx"><div class="nm">${esc(x.name)}</div><div class="ds">${esc(x.description || '')}</div><div class="ds">${esc(x.author || '')}</div></div>${inst ? '' : '<button class="btn bt" data-i>Install</button>'}</div>`; }).join('') || '<div class="muted" style="padding:12px">Nothing here.</div>';
+}
+function setX(on) { xs.classList.toggle('on', on); $('side').style.display = on ? 'none' : ''; if (on) drawList(); }
+xs.onclick = async e => {
+  const s = e.target.closest('[data-s]');
+  if (s) { seg = s.dataset.s; xs.querySelectorAll('[data-s]').forEach(b => b.className = 'btn ' + (b.dataset.s === seg ? 'pri' : 'line')); return drawList(); }
+  if (e.target.closest('#xC')) return setX(false);
+  if (e.target.closest('#xN')) { const c = COMMANDS.find(c => c[1] === 'New extension…'); return c && c[2](); }
+  const row = e.target.closest('.xi'); if (!row) return;
+  if (e.target.closest('[data-i]')) { e.stopPropagation(); sync(); await installExt(known.get(row.dataset.id)); return drawList(); }
+  xvId = row.dataset.id; xvOn = true; if (matchMedia('(max-width:900px)').matches) setX(false); renderAll(); drawList();
+};
+$('xq').oninput = e => { term = e.target.value.toLowerCase(); drawList(); };
+document.addEventListener('click', e => {
+  const b = e.target.closest('.nav .btn'); if (b && /Customize/.test(b.textContent)) { e.stopImmediatePropagation(); e.preventDefault(); setX(true); }
+}, true);
+$('side').addEventListener('click', () => { xvOn = false; }, true);
+$('scrim').addEventListener('click', () => setX(false));
+
+/* ---------- read-only extension tab ---------- */
+let xvOn = false, xvId = null;
+const xv = el('div'); xv.id = 'xview'; $('main').appendChild(xv);
+function drawXv() {
+  sync(); const x = known.get(xvId); if (!x) { xv.innerHTML = ''; return; }
+  const inst = LoomExt.list.find(e => e.id === x.id);
+  xv.innerHTML = `<div class="xvh">${logo(x, 'big')}<div><div class="xvt">${esc(x.name)}</div><div class="muted">${esc(x.author || '')} · v${esc(x.version || '1.0.0')}</div><div>${esc(x.description || '')}</div><div class="xva">${inst ? `<button class="btn line" data-a="tg">${inst.enabled ? 'Disable' : 'Enable'}</button><button class="btn line" data-a="un">Uninstall</button>` : '<button class="btn pri" data-a="in">Install</button>'}</div></div></div><div class="xvb rd">${md(x.readme || '# ' + x.name + '\n\n' + (x.description || 'No README.'))}</div>`;
+}
+xv.onclick = async e => {
+  const b = e.target.closest('[data-a]'); if (!b) return; const x = known.get(xvId), i = LoomExt.list.findIndex(y => y.id === xvId);
+  if (b.dataset.a === 'in') await installExt(x);
+  else if (b.dataset.a === 'un') { LoomExt.unload(xvId); LoomExt.list.splice(i, 1); persistExt(); }
+  else if (b.dataset.a === 'tg') { const y = LoomExt.list[i]; if (y.enabled) { LoomExt.unload(y.id); y.enabled = false; persistExt(); } else await LoomExt.install(y); }
+  drawXv(); drawList();
+};
+wrapFn('renderView', o => {
+  o();
+  if (xvOn && xvId) { ['welcome', 'ed', 'media', 'cons', 'status', 'bRun'].forEach(id => $(id).style.display = 'none'); xv.style.display = 'block'; drawXv(); }
+  else xv.style.display = 'none';
+});
+wrapFn('renderTabs', o => {
+  o(); if (!xvId) return; sync(); const x = known.get(xvId); if (!x) return;
+  const d = el('div', 'tab xtab' + (xvOn ? ' on' : ''), `<span>${esc(x.name)}</span><i title="Close">×</i>`);
+  if (xvOn) $('tabs').querySelectorAll('.tab.on').forEach(t => t.classList.remove('on'));
+  d.onclick = () => { xvOn = true; renderAll(); };
+  d.querySelector('i').onclick = e => { e.stopPropagation(); xvId = null; xvOn = false; renderAll(); drawList(); };
+  $('tabs').appendChild(d);
+});
+$('tabs').addEventListener('click', e => { if (!e.target.closest('.xtab')) xvOn = false; }, true);
+wrapFn('openFile', (o, p) => { xvOn = false; return o(p); });
+
+/* ---------- develop form: optional logo + README ---------- */
+let pend = { logo: '', readme: '' };
+const toLogo = f => new Promise((ok, no) => { const u = URL.createObjectURL(f), i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const s = Math.min(i.naturalWidth, i.naturalHeight) || 128; c.getContext('2d').drawImage(i, (i.naturalWidth - s) / 2, (i.naturalHeight - s) / 2, s, s, 0, 0, 128, 128); URL.revokeObjectURL(u); ok(c.toDataURL('image/webp', .88)); }; i.onerror = () => no(Error('Unreadable image')); i.src = u; });
+function injectDev(B) {
+  if (!q('#dc', B) || q('.xmeta', B)) return; pend = { logo: '', readme: '' };
+  const m = el('div', 'xmeta', `<span class="xl" id="xmL">?</span><button class="btn line" id="xmLb">Logo (optional)</button><button class="btn line" id="xmRb">README .md (optional)</button><span class="muted" id="xmRn"></span><input type="file" id="xmLf" accept="image/*" hidden><input type="file" id="xmRf" accept=".md,.markdown,.txt,text/*" hidden>`);
+  q('#dd', B).after(m);
+  q('#xmLb', m).onclick = () => q('#xmLf', m).click(); q('#xmRb', m).onclick = () => q('#xmRf', m).click();
+  q('#xmLf', m).onchange = async e => { try { pend.logo = await toLogo(e.target.files[0]); const p = q('#xmL', m); p.style.backgroundImage = `url('${pend.logo}')`; p.textContent = ''; } catch (er) { toast(er.message); } };
+  q('#xmRf', m).onchange = async e => { const f = e.target.files[0]; if (!f) return; pend.readme = (await f.text()).slice(0, 100000); q('#xmRn', m).textContent = f.name; };
+}
+new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+  if (!(n instanceof HTMLElement) || !n.classList.contains('ov') || q('.mh b', n)?.textContent !== 'Extensions') return;
+  const B = q('.mb', n); new MutationObserver(() => injectDev(B)).observe(B, { childList: true }); injectDev(B);
+}))).observe(document.body, { childList: true });
+document.addEventListener('click', e => {
+  const s = e.target.closest('.mc [data-a="save"]'); if (!s) return;
+  const n = (q('#dn', s.closest('.mb')) || {}).value?.trim(); if (!n || (!pend.logo && !pend.readme)) return;
+  const got = { ...pend };
+  const t = setInterval((k = (k || 0) + 1) => {
+    const x = LoomExt.list.find(y => y.name === n);
+    if (x) { clearInterval(t); if (got.logo) x.logo = got.logo; if (got.readme) x.readme = got.readme; persistExt();
+      store.set('loom_pm:' + x.id, JSON.stringify({ version: x.version || '1.0.0', readme: x.readme || '', logo: x.logo || '', description: x.description || '' })); drawList(); }
+  }, 150); setTimeout(() => clearInterval(t), 4000);
+}, true);
+
+renderAll();
+})();
+</script>
+<!-- ===== end patch v3 ===== -->
 </body>
 </html>
