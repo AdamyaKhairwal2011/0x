@@ -100,7 +100,7 @@ svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke
 #cons .hd{display:flex;align-items:center;gap:6px;padding:4px 10px;color:var(--mut);font-size:12px}#cons .hd b{color:var(--tx);font-weight:500;flex:1}
 #cout{flex:1;overflow:auto;padding:0 14px 10px;font:12.5px/19px var(--mono);white-space:pre-wrap;word-break:break-word}
 .l.err{color:var(--err)}.l.warn{color:var(--warn)}.l.mut{color:var(--mut)}
-.panel{display:none;flex-direction:column;border-left:1px solid var(--line);background:var(--side);flex:none}
+.panel{display:none;flex-direction:column;border-left:1px solid var(--line);background:var(--side);flex:none; z-index: 14; }
 .panel.on{display:flex}
 .ph{display:flex;align-items:center;gap:4px;height:38px;padding:0 8px 0 14px;border-bottom:1px solid var(--line)}.ph b{font-weight:500;flex:1}
 #prev{width:44%;min-width:300px}#prev iframe{flex:1;border:0;background:#fff}
@@ -117,7 +117,7 @@ svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke
 
 /* ---- modals, menus, toast ---- */
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;z-index:40}.ov.top{place-items:start center;padding-top:12vh}
-.mc{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.35);width:min(480px,94vw);max-height:86dvh;display:flex;flex-direction:column}
+.mc{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.35);width:min(480px,94vw);max-height:500px; overflow:auto; display:flex;flex-direction:column}
 .mh{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 6px;font-weight:600;font-size:14px}
 .mb{overflow:auto;padding:6px 14px 14px;display:flex;flex-direction:column;gap:9px}
 .mb label{display:block;color:var(--mut);font-size:12px}.mb label input{margin-top:4px}
@@ -733,7 +733,7 @@ const vaultSave = list => vaultRequest('POST', JSON.stringify({ id: vaultId(), d
 
 async function openSecrets() {
   const m = modal('Secrets · Tijori'); let list = [], err = '', shown = new Set();
-  m.body.innerHTML = `<div class="er" id="sErr"></div><div id="sList" style="display:flex;flex-direction:column;gap:8px"></div>
+  m.body.innerHTML = `<div class="er" id="sErr"></div><div id="sList" style="display:flex;flex-direction:column;gap:8px; max-height: 300px; overflow-y: auto;"></div>
     <input id="sLabel" placeholder="Label (e.g. API_KEY)"><textarea id="sVal" placeholder="Value" style="min-height:64px"></textarea><button class="btn pri" id="sAdd" style="align-self:flex-end">Save to Tijori</button>`;
   const q = s => m.body.querySelector(s);
   const draw = () => {
@@ -1824,7 +1824,7 @@ body{font:14px/1.5 "Google Sans Text","Google Sans",Inter,system-ui,sans-serif}
 .chips .btn:hover{background:var(--sel)}
 #media{inset:56px 0 26px 0}
 #status{background:var(--side)}
-.panel{border-left:1px solid var(--line);background:var(--bg)}
+.panel{border-left:1px solid var(--line);background:var(--bg);}
 .ph{height:56px;border-bottom:0}.ph b{font-size:14px}
 .mc{border-radius:24px;border:0;box-shadow:0 12px 48px rgba(0,0,0,.25)}
 .mh{padding:18px 20px 8px;font:500 18px "Google Sans",Inter,sans-serif}.mb{padding:8px 20px 20px}
@@ -2752,5 +2752,570 @@ window.addEventListener('blur', closeAll);
 })();
 </script>
 <!-- ===== end patch v5 ===== -->
+
+<!-- ===== 0x Loom patch v6: 0x Shell (notebook) + home cards =====
+     Paste right before </body>, AFTER patch v5.
+     Optional: set window.LOOM_TRAFFIC_URL = 'https://your-traffic-manager' before this block. -->
+<style id="loom-shell-css">
+/* ---- home cards ---- */
+.tcards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;width:min(660px,100%);margin-top:6px}
+.tcard{flex:1 1 190px;display:flex;flex-direction:column;gap:6px;text-align:left;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--card);transition:background .15s,transform .2s var(--spring)}
+.tcard:hover{background:var(--hover);transform:translateY(-2px)}
+.tcard svg{width:20px;height:20px;color:var(--blue)}
+.tcard b{font:15px 'Geist Pixel',var(--mono)}.tcard span{color:var(--mut);font:12.5px Helvetica,Arial,sans-serif}
+/* ---- traffic frame ---- */
+#tmv{position:fixed;inset:0;z-index:36;background:var(--bg);display:none;flex-direction:column;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+#tmv.on{display:flex}#tmv .tmh{display:flex;align-items:center;gap:4px;height:48px;padding:0 10px;border-bottom:1px solid var(--line)}
+#tmv .tmh b{font:16px 'Geist Pixel',var(--mono);margin-left:6px}#tmv .sp{flex:1}#tmv iframe{flex:1;border:0;background:#fff}
+/* ---- shell ---- */
+body.shellopen #mbar{display:none}
+#shell{position:fixed;inset:0;z-index:35;background:var(--bg);color:var(--tx);display:none;flex-direction:column;font:14px/1.5 Helvetica,Arial,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+#shell.on{display:flex;animation:fade .25s}
+#shell .sp{flex:1}
+#shell b,#shell strong{font-weight:700!important}
+#shell .sh-name,#shell .sh-logo,#shell .mdv h1,#shell .mdv h2,#shell .mdv h3,#shell .mdv h4,#shell .dh b,#shell .ph2{font-family:'Geist Pixel',var(--mono)}
+.sh-hd{display:flex;align-items:center;gap:8px;padding:8px 18px 4px;flex:none}
+.sh-logo{font-size:26px;color:var(--acc);margin-right:10px;height:44px;padding:0 6px;border-radius:10px}.sh-logo:hover{background:var(--hover)}
+.sh-ti{display:flex;flex-direction:column;min-width:0}
+.sh-r1{display:flex;align-items:center;gap:4px}
+.sh-name{font-size:19px;padding:0 6px;border-radius:6px;max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sh-name:hover{background:var(--hover)}
+.sh-mn{display:flex;overflow-x:auto;scrollbar-width:none}.sh-mn button{height:28px;padding:0 10px;border-radius:6px;font-size:14px;flex:none}.sh-mn button:hover{background:var(--hover)}
+#shell .ib{width:34px;height:34px;border-radius:50%;color:var(--mut);display:inline-grid;place-items:center;flex:none}#shell .ib:hover{background:var(--hover);color:var(--tx)}#shell .ib svg{width:18px;height:18px}
+#shStar.starred svg{fill:var(--warn);color:var(--warn);stroke:var(--warn)}
+#shCloud{position:relative}#shCloud.dirty::after{content:"";position:absolute;right:6px;top:6px;width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.sh-share{display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 24px;border-radius:999px;background:color-mix(in srgb,var(--blue) 25%,transparent);color:var(--blue);font-size:15px;margin:0 6px;flex:none}.sh-share:hover{background:color-mix(in srgb,var(--blue) 38%,transparent)}.sh-share svg{width:18px;height:18px}
+.shav{width:40px;height:40px;border-radius:50%;background:var(--acc);color:var(--on-acc);display:grid;place-items:center;flex:none;background-size:cover;background-position:center;font-size:16px}
+.sh-tb{display:flex;align-items:center;gap:2px;margin:6px 16px 0;padding:6px 10px;background:var(--side);border-radius:16px;overflow-x:auto;scrollbar-width:none;flex:none}
+#shell.compact .sh-tb{display:none}
+.sh-tb button{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:999px;font-size:15px;flex:none;white-space:nowrap}.sh-tb button:hover{background:var(--hover)}.sh-tb svg{width:16px;height:16px}
+.sh-tb .car{padding:0 6px;margin-left:-6px;border-radius:50%}.sh-tb .sepv{width:1px;height:22px;background:var(--line);margin:0 6px;flex:none}
+#tbConn i{width:8px;height:8px;border-radius:50%;background:var(--mut)}#tbConn.ok i{background:#4cb7a5}#tbConn.err i{background:var(--err)}#tbConn.busy i{background:var(--warn);animation:shblink 1s infinite}
+#tbCol svg{transition:transform .2s}#shell.compact #tbCol svg{transform:rotate(180deg)}
+.sh-bd{flex:1;min-height:0;display:flex;gap:12px;padding:12px 16px 0;position:relative}
+.sh-rail{display:flex;flex-direction:column;gap:6px;padding:10px 6px;background:var(--side);border-radius:24px;align-self:flex-start;flex:none}
+.sh-rail .ib{border-radius:12px;width:38px;height:38px;color:var(--tx)}.sh-rail .ib.on{background:var(--sel)}
+.sh-pn{display:none;width:290px;flex:none;background:var(--side);border-radius:18px;flex-direction:column;overflow:hidden}.sh-pn.on{display:flex}
+.sh-pn .ph2{padding:14px 16px 6px;font-size:16px}.sh-pn .pb{flex:1;overflow:auto;padding:6px 10px 12px;display:flex;flex-direction:column;gap:6px}
+.toci{padding:5px 8px;border-radius:8px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.toci:hover{background:var(--hover)}
+#shMain{flex:1;min-width:0;overflow:auto;background:var(--card);border-radius:24px 24px 0 0;padding:18px 22px 120px;scroll-behavior:smooth}
+/* cells */
+.sc{position:relative;display:grid;grid-template-columns:46px minmax(0,1fr);gap:0 8px;margin:12px 0}
+.sc[hidden]{display:none}
+.sg{font:12px var(--mono);color:var(--mut);text-align:right;padding-top:12px;white-space:nowrap}
+.sbox{position:relative;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
+.sc.sel .sbox{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+.srun{position:absolute;left:10px;top:10px;width:25px;height:25px;border-radius:50%;background:var(--acc);color:var(--on-acc);display:grid;place-items:center;z-index:1}.srun svg{width:12px;height:12px;fill:currentColor;stroke:none}
+.kc .sed{display:grid;margin:0 12px 0 52px;padding:10px 0;font:13px/20px var(--mono);min-height:40px}
+#shell .shl,#shell .sta{grid-area:1/1;margin:0;padding:0;border:0;border-radius:0;background:none;font:inherit;white-space:pre-wrap;word-break:break-word;overflow:hidden;width:100%;min-width:0;display:block}
+#shell .shl{pointer-events:none;color:var(--tx);border:0}
+#shell .sta{color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--acc);resize:none;outline:none}
+#shell .sta::selection{background:rgba(120,150,255,.35);-webkit-text-fill-color:transparent}
+.sout{border-top:1px solid var(--line);padding:8px 12px 8px 52px;max-height:480px;overflow:auto}
+.so{margin:0;font:12.5px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;background:none;border:0;padding:0}.so.error{color:var(--err)}
+.sti{font:12px Helvetica,Arial,sans-serif;color:var(--mut);margin-top:4px}.sti.ok{color:#4cb7a5}.sti.bad{color:var(--err)}
+#shell.nooutputs .sout{display:none}
+.spin{display:inline-block;width:9px;height:9px;border:2px solid var(--mut);border-top-color:var(--blue);border-radius:50%;animation:shspin .7s linear infinite;vertical-align:-1px}
+.stl{display:none;position:absolute;right:10px;top:-18px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1px 3px;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:3}
+.sc.sel .stl{display:flex}.stl .ib{width:30px;height:30px}.stl .ib svg{width:16px;height:16px}
+.sfold{width:26px!important;height:26px!important;margin-top:6px}.sfold svg{transition:transform .15s;transform:rotate(90deg)}.sfold.f svg{transform:none}
+.kt .sbox{border-color:transparent;background:none;padding:6px 14px}.kt.sel .sbox{border-color:var(--blue)}.kt.ed .sbox{background:var(--bg);border-color:var(--blue)}
+.mdgrid{display:block}.kt.ed .mdgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+#shell .mta{width:100%;min-height:80px;resize:none;overflow:hidden;font:13px/1.55 var(--mono);color:var(--tx);background:none;border:0;border-right:1px solid var(--line);border-radius:0;padding:4px 10px 4px 0;outline:none}
+.mdv{font:15px/1.6 Helvetica,Arial,sans-serif;min-width:0;word-break:break-word}.mdv>*:first-child{margin-top:0}
+.mdv h1{font-size:30px;margin:8px 0}.mdv h2{font-size:24px;margin:10px 0 6px}.mdv h3{font-size:19px;margin:10px 0 4px}.mdv h4,.mdv h5,.mdv h6{font-size:16px;margin:8px 0 4px}
+.mdv p{margin:6px 0}.mdv code{font:12.5px var(--mono);background:var(--hover);padding:1px 5px;border-radius:5px}.mdv pre{background:var(--side);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto}.mdv pre code{background:none;padding:0}
+.mdv blockquote{margin:6px 0;padding:2px 12px;border-left:3px solid var(--line);color:var(--mut)}.mdv a{color:var(--blue)}.mdv hr{border:0;border-top:1px solid var(--line)}
+.addrow{display:flex;gap:8px;margin:18px 0 0 54px}.addrow .btn{border:1px solid var(--line);height:34px}
+/* drawer + footer */
+.sh-dr{display:none;flex-direction:column;height:240px;flex:none;margin:0 16px;background:var(--side);border-radius:16px 16px 0 0;overflow:hidden}.sh-dr.on{display:flex}
+.dh{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 16px;border-bottom:1px solid var(--line)}.dh b{font-size:15px}
+.db{flex:1;overflow:auto;padding:8px 16px;display:flex;flex-direction:column}.db pre{margin:0;flex:1;font:12.5px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;background:none;border:0;padding:0}
+#tIn{font:12.5px var(--mono);border-radius:8px;margin-top:6px}
+.sh-ft{display:flex;align-items:center;gap:6px;height:44px;padding:0 20px;background:var(--side);flex:none;position:relative}
+.sh-ft button{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:8px;font-size:15px}.sh-ft button:hover{background:var(--hover)}.sh-ft svg{width:16px;height:16px}
+.sh-fab{position:absolute!important;left:50%;top:-22px;transform:translateX(-50%);width:52px;height:52px;padding:0!important;border-radius:50%!important;background:var(--blue)!important;color:#fff;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.3)}.sh-fab svg{width:24px;height:24px;fill:#fff;stroke:none}
+/* popup menu */
+#shpop{position:fixed;z-index:45;min-width:240px;max-height:calc(100dvh - 20px);overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:0 10px 32px rgba(0,0,0,.35);font:13.5px Helvetica,Arial,sans-serif;animation:mci .15s var(--ease)}
+#shpop button{display:flex;justify-content:space-between;gap:20px;width:100%;padding:7px 10px;border-radius:6px;text-align:left}#shpop button:hover{background:var(--sel)}#shpop em{font-style:normal;color:var(--mut);font-size:12px}#shpop hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.svo{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;cursor:pointer;background:var(--bg)}.svo:hover{background:var(--hover)}.svo span{color:var(--mut);font-size:12.5px}
+@keyframes shspin{to{transform:rotate(360deg)}}@keyframes shblink{50%{opacity:.3}}
+@media(max-width:900px){.sh-pn{position:absolute;left:68px;top:12px;bottom:0;z-index:5;box-shadow:0 8px 30px rgba(0,0,0,.4)}}
+@media(max-width:700px){.sh-hd{padding:6px 8px 2px}.sh-share{padding:0 14px}.sh-share span,.shav{display:none}.sh-bd{padding:8px 8px 0}.sh-rail{padding:6px 3px}#shMain{padding:14px 10px 120px}.sc{grid-template-columns:34px minmax(0,1fr);gap:0 4px}.kt.ed .mdgrid{grid-template-columns:1fr}#shell .mta{border-right:0;border-bottom:1px solid var(--line)}.kc .sed{margin-left:46px}.sout{padding-left:46px}}
+</style>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id), q = (s, r = document) => r.querySelector(s), qa = (s, r = document) => [...r.querySelectorAll(s)];
+const TRAFFIC_URL = window.LOOM_TRAFFIC_URL || '';
+const sv = d => `<svg viewBox="0 0 16 16">${d}</svg>`;
+const IC = {
+  play: '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9.500-5.500z"/></svg>', stop: '<svg viewBox="0 0 16 16"><rect x="3.500" y="3.500" width="9" height="9" rx="1.500"/></svg>',
+  up: sv('<path d="M8 13V3M4 7l4-4 4 4"/>'), down: sv('<path d="M8 3v10M4 9l4 4 4-4"/>'), pen: sv('<path d="M3 13l.5-3L10.500 3l2.500 2.500L6 12.500z"/>'),
+  trash: sv('<path d="M3 4.500h10M6 4.500V3h4v1.500M4.500 4.500l.5 8.500h6l.5-8.500"/>'), more: '<svg viewBox="0 0 16 16" style="fill:currentColor;stroke:none"><circle cx="8" cy="3.500" r="1.200"/><circle cx="8" cy="8" r="1.200"/><circle cx="8" cy="12.500" r="1.200"/></svg>',
+  chev: sv('<path d="M6 3l5 5-5 5"/>'), search: sv('<circle cx="7" cy="7" r="4.500"/><path d="M10.500 10.500 14 14"/>'), plus: sv('<path d="M8 3v10M3 8h10"/>'),
+  star: sv('<path d="M8 1.800l1.900 4 4.300.5-3.200 3 .9 4.300L8 11.400l-3.900 2.200.9-4.300-3.200-3 4.300-.5z"/>'), cloud: sv('<path d="M4.500 12.500a3 3 0 0 1-.4-6 4 4 0 0 1 7.700 1A2.500 2.500 0 0 1 11.500 12.500z"/>'),
+  lock: sv('<rect x="3.500" y="7" width="9" height="6.500" rx="1.500"/><path d="M5.500 7V5a2.500 2.500 0 0 1 5 0v2"/>'), gear: sv('<circle cx="8" cy="8" r="2.200"/><path d="M8 1.500v1.800M8 12.700v1.800M1.500 8h1.800M12.700 8h1.800M3.400 3.400l1.300 1.300M11.300 11.300l1.300 1.300M12.600 3.400l-1.300 1.300M4.700 11.300l-1.300 1.300"/>'),
+  chat: sv('<path d="M2.500 3h11v7.500H7L4 13v-2.500H2.500z"/><path d="M5 6h6M5 8h4"/>'), list: sv('<path d="M5.500 4h8M5.500 8h8M5.500 12h8M2.500 4h.01M2.500 8h.01M2.500 12h.01"/>'),
+  find: sv('<path d="M4 1.800h5l3 3V14H4z"/><circle cx="7.500" cy="9" r="2"/><path d="M9 10.500l1.500 1.500"/>'), code: sv('<path d="M5.500 4L2 8l3.500 4M10.500 4L14 8l-3.500 4"/>'),
+  eye: sv('<path d="M1.500 8S4 3.500 8 3.500 14.500 8 14.500 8 12 12.500 8 12.500 1.500 8 1.500 8z"/><circle cx="8" cy="8" r="2"/>'), key: sv('<circle cx="4.500" cy="8" r="2.500"/><path d="M7 8h7M12 8v2.500M10 8v1.500"/>'),
+  folder: sv('<path d="M2 4.500A1.500 1.500 0 0 1 3.500 3h3L8 4.500h4.500A1.500 1.500 0 0 1 14 6v5.500a1.500 1.500 0 0 1-1.500 1.500h-9A1.500 1.500 0 0 1 2 11.500z"/>'),
+  term: sv('<rect x="2" y="3" width="12" height="10" rx="1.500"/><path d="M5 7l2 1.500L5 10M8.500 10.500H11"/>'), car: sv('<path d="M4 6.500l4 4 4-4"/>'), carUp: sv('<path d="M4 9.500l4-4 4 4"/>'),
+  spark: '<svg viewBox="0 0 24 24"><path d="M12 2c.6 5.600 4.400 9.400 10 10-5.600.6-9.400 4.400-10 10-.6-5.600-4.400-9.400-10-10 5.600-.6 9.400-4.400 10-10z"/></svg>',
+  globe: sv('<circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2.500 10 0 12M8 2c-2 2-2.500 10 0 12"/>'), cust: sv('<rect x="2.500" y="6.500" width="5" height="7" rx="1"/><rect x="8.500" y="8.500" width="5" height="5" rx="1"/><rect x="5" y="2.500" width="5" height="3" rx="1"/>'),
+  run: sv('<path d="M5 3v10l8-5z"/>'),
+};
+const uid = () => Math.random().toString(36).slice(2, 10), sleep = ms => new Promise(r => setTimeout(r, ms));
+const safe = n => String(n || '').replace(/[\\/:*?"<>|]+/g, '_').replace(/\.ipynb$/i, '').trim() || 'Untitled';
+const fmt = ms => ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(2) + ' s';
+const MOD = e => e.ctrlKey || e.metaKey;
+const debounce2 = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+/* =============================== model =============================== */
+const mk = (type, src = '') => ({ id: uid(), type, src, out: [], ec: null, ok: false, time: null, run: false, fold: false, edit: false });
+const blank = () => ({ name: 'Untitled', star: false, cells: [mk('code')], sel: 0 });
+let NB = blank(), dirty = false, share = true, outHide = false, counter = 0, abortCtl = null, stopAll = false, busy = false, booted = false;
+let view = null, drView = null, termOut = '', varOut = '', termHist = [], conn = { s: 'idle' };
+const lines = s => { const a = String(s).split('\n'); return a.map((l, i) => i < a.length - 1 ? l + '\n' : l).filter((l, i, r) => !(i === r.length - 1 && l === '')); };
+function toNb() {
+  return { cells: NB.cells.map(c => {
+    const b = { id: c.id, metadata: {} };
+    if (c.type === 'md') return { ...b, cell_type: 'markdown', source: lines(c.src) };
+    const outs = c.out.filter(o => o.text).map(o => o.t === 'error' ? { output_type: 'error', ename: 'Error', evalue: '', traceback: lines(o.text) } : { output_type: 'stream', name: 'stdout', text: lines(o.text) });
+    return { ...b, cell_type: 'code', execution_count: c.ec, source: lines(c.src), outputs: outs };
+  }), metadata: { kernelspec: { display_name: 'Python 3', language: 'python', name: 'python3' }, language_info: { name: 'python' }, loom: { starred: NB.star } }, nbformat: 4, nbformat_minor: 5 };
+}
+function fromNb(j, name) {
+  if (typeof j === 'string') j = JSON.parse(j);
+  if (!j || !Array.isArray(j.cells)) throw Error('Not a valid .ipynb notebook');
+  const J = v => Array.isArray(v) ? v.join('') : String(v ?? ''), ansi = s => s.replace(/\x1b\[[0-9;]*m/g, '');
+  const cells = j.cells.map(c => {
+    const x = mk(c.cell_type === 'code' ? 'code' : 'md', J(c.source));
+    if (x.type === 'code') (c.outputs || []).forEach(o => {
+      if (o.output_type === 'stream') x.out.push({ t: 'stdout', text: J(o.text) });
+      else if (o.output_type === 'error') x.out.push({ t: 'error', text: ansi((o.traceback || []).join('\n') || (o.ename + ': ' + o.evalue)) });
+      else if (o.data && o.data['text/plain']) x.out.push({ t: 'stdout', text: J(o.data['text/plain']) });
+    });
+    return x;
+  });
+  return { name: safe(name || 'Untitled'), star: !!(j.metadata && j.metadata.loom && j.metadata.loom.starred), cells: cells.length ? cells : [mk('code')], sel: 0 };
+}
+
+/* ============================ markdown / hl ============================ */
+function mdr(src) {
+  let out = '', ul = null, code = false, buf = [];
+  const inl = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>').replace(/~~([^~]+)~~/g, '<s>$1</s>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const close = () => { if (ul) { out += `</${ul}>`; ul = null; } };
+  for (const l of String(src).split('\n')) {
+    if (/^\s*```/.test(l)) { if (code) { out += '<pre><code>' + esc(buf.join('\n')) + '</code></pre>'; buf = []; code = false; } else { close(); code = true; } continue; }
+    if (code) { buf.push(l); continue; }
+    let m;
+    if ((m = l.match(/^(#{1,6})\s+(.*)/))) { close(); out += `<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`; }
+    else if (/^\s*([-*_])\1{2,}\s*$/.test(l)) { close(); out += '<hr>'; }
+    else if ((m = l.match(/^\s*[-*+]\s+(.*)/))) { if (ul !== 'ul') { close(); out += '<ul>'; ul = 'ul'; } out += `<li>${inl(m[1])}</li>`; }
+    else if ((m = l.match(/^\s*\d+[.)]\s+(.*)/))) { if (ul !== 'ol') { close(); out += '<ol>'; ul = 'ol'; } out += `<li>${inl(m[1])}</li>`; }
+    else if ((m = l.match(/^>\s?(.*)/))) { close(); out += `<blockquote>${inl(m[1])}</blockquote>`; }
+    else if (!l.trim()) close();
+    else { close(); out += `<p>${inl(l)}</p>`; }
+  }
+  if (code) out += '<pre><code>' + esc(buf.join('\n')) + '</code></pre>';
+  close(); return out || '<p style="color:var(--mut)">Empty text cell — double-click to edit</p>';
+}
+const hl = src => { const v = String(src); let h; try { h = window.hljs ? hljs.highlight(v, { language: 'python', ignoreIllegals: true }).value : esc(v); } catch { h = esc(v); } return h + '\n'; };
+
+/* =============================== DOM =============================== */
+const sh = document.createElement('div'); sh.id = 'shell';
+sh.innerHTML = `
+<div class="sh-hd">
+  <button class="sh-logo" id="shLogo" title="Back to 0x Loom">0x</button>
+  <div class="sh-ti"><div class="sh-r1"><button class="sh-name" id="shName" title="Rename"></button><button class="ib" id="shStar" title="Star">${IC.star}</button><button class="ib" id="shCloud" title="Save status">${IC.cloud}</button></div><div class="sh-mn" id="shMenus"></div></div>
+  <span class="sp"></span>
+  <button class="ib" id="shHelp" title="Keyboard shortcuts">${IC.chat}</button><button class="ib" id="shSet" title="Toggle theme">${IC.gear}</button>
+  <button class="sh-share" id="shSave" title="Save (Ctrl S)">${IC.lock}<span>Save</span></button><span class="shav" id="shAv"></span>
+</div>
+<div class="sh-tb" id="shTb">
+  <button id="tbCmd">${IC.search}Commands</button>
+  <button id="tbCode">${IC.plus}Code</button><button class="car" id="tbCodeC">${IC.car}</button>
+  <button id="tbText">${IC.plus}Text</button><i class="sepv"></i>
+  <button id="tbRun">${IC.run}Run all</button><button class="car" id="tbRunC">${IC.car}</button>
+  <span class="sp"></span>
+  <button id="tbConn"><i></i><span>Connect</span></button><button class="car" id="tbConnC">${IC.car}</button><button class="car" id="tbCol" title="Collapse toolbar">${IC.carUp}</button>
+</div>
+<div class="sh-bd"><nav class="sh-rail" id="shRail"></nav><aside class="sh-pn" id="shPn"></aside><main id="shMain"><div id="shc"></div></main></div>
+<div class="sh-dr" id="shDr"></div>
+<div class="sh-ft"><button id="ftVar">${IC.code}Variables</button><button id="ftTerm">${IC.term}Terminal</button><button class="sh-fab" id="shFab" title="Ask AI to write a code cell">${IC.spark}</button></div>`;
+document.body.appendChild(sh);
+const shc = $('shc');
+
+/* =============================== rendering =============================== */
+function visible() {
+  const hid = []; let lvl = 0;
+  NB.cells.forEach((c, i) => { const m = c.type === 'md' && c.src.match(/^(#{1,6})\s/), L = m ? m[1].length : 0; if (lvl && L && L <= lvl) lvl = 0; hid[i] = !!lvl; if (!hid[i] && L && c.fold) lvl = L; });
+  return hid;
+}
+function cellHtml(c, i, hid) {
+  const sel = i === NB.sel, head = c.type === 'md' && /^#{1,6}\s/.test(c.src);
+  const tools = `<div class="stl"><button class="ib" data-a="up" title="Move cell up">${IC.up}</button><button class="ib" data-a="down" title="Move cell down">${IC.down}</button><button class="ib" data-a="edit" title="Edit">${IC.pen}</button><button class="ib" data-a="del" title="Delete cell">${IC.trash}</button><button class="ib" data-a="more" title="More actions">${IC.more}</button></div>`;
+  if (c.type === 'md') return `<div class="sc kt${sel ? ' sel' : ''}${c.edit ? ' ed' : ''}" data-i="${i}"${hid ? ' hidden' : ''}><div class="sg">${head ? `<button class="ib sfold${c.fold ? ' f' : ''}" data-a="fold" title="Collapse / expand section">${IC.chev}</button>` : ''}</div><div class="sbox">${tools}<div class="mdgrid">${c.edit ? `<textarea class="mta" spellcheck="false" placeholder="Write Markdown…">${esc(c.src)}</textarea>` : ''}<div class="mdv" data-a="mdv">${mdr(c.src)}</div></div></div></div>`;
+  const outs = c.out.map(o => `<pre class="so ${o.t}">${esc(o.text)}</pre>`).join('');
+  const info = c.run ? '<div class="sti" data-t>Running…</div>' : c.time != null ? `<div class="sti ${c.ok ? 'ok' : 'bad'}">${c.ok ? '✓' : '✗'} ${fmt(c.time)}</div>` : '';
+  return `<div class="sc kc${sel ? ' sel' : ''}" data-i="${i}"${hid ? ' hidden' : ''}><div class="sg">${c.run ? '[<span class="spin"></span>]' : c.ec == null ? '[ ]' : '[' + c.ec + ']'}</div><div class="sbox">${tools}<button class="srun" data-a="run" title="${c.run ? 'Interrupt' : 'Run cell (Ctrl+Enter)'}">${c.run ? IC.stop : IC.play}</button><div class="sed"><pre class="shl">${hl(c.src)}</pre><textarea class="sta" rows="1" spellcheck="false" autocapitalize="off" autocomplete="off">${esc(c.src)}</textarea></div>${outs || info ? `<div class="sout">${outs}${info}</div>` : ''}</div></div>`;
+}
+const fit1 = t => { t.style.height = '0'; t.style.height = t.scrollHeight + 'px'; };
+const fit = root => qa('textarea', root || shc).forEach(fit1);
+function keep(fn, nk) {
+  const a = document.activeElement, ok = !nk && a && a.matches && a.matches('.sta,.mta') && shc.contains(a);
+  const i = ok ? +a.closest('.sc').dataset.i : -1, s = ok ? a.selectionStart : 0, e = ok ? a.selectionEnd : 0, sc = $('shMain').scrollTop;
+  fn(); $('shMain').scrollTop = sc;
+  if (i >= 0) { const t = q(`.sc[data-i="${i}"] textarea`, shc); if (t) { t.focus({ preventScroll: true }); try { t.setSelectionRange(s, e); } catch {} } }
+}
+function render(nk) {
+  keep(() => { const hid = visible(); shc.innerHTML = NB.cells.map((c, i) => cellHtml(c, i, hid[i])).join('') + `<div class="addrow"><button class="btn" data-a="addcode">${IC.plus}Code</button><button class="btn" data-a="addtext">${IC.plus}Text</button></div>`; fit(); }, nk);
+  head(); drawPanel();
+}
+function refreshCell(c) {
+  const i = NB.cells.indexOf(c), el = q(`.sc[data-i="${i}"]`, shc); if (!el) return;
+  keep(() => { el.outerHTML = cellHtml(c, i, visible()[i]); fit(q(`.sc[data-i="${i}"]`, shc)); }); head();
+}
+function selCell(i) { NB.sel = i; qa('.sc', shc).forEach(el => el.classList.toggle('sel', +el.dataset.i === i)); }
+const saveDraft = debounce2(() => { try { localStorage.setItem('vk_shell_draft', JSON.stringify({ name: NB.name, dirty, nb: toNb() })); } catch {} }, 800);
+function changed() { dirty = true; head(); saveDraft(); }
+function head() {
+  $('shName').textContent = NB.name + '.ipynb'; $('shStar').classList.toggle('starred', NB.star);
+  $('shCloud').classList.toggle('dirty', dirty); $('shCloud').title = dirty ? 'Unsaved changes — click to save' : 'All changes saved';
+  const a = $('shAv'), nm = store.get('vcloud_username') || 'User'; a.textContent = GH && GH.user ? '' : nm[0].toUpperCase(); a.style.backgroundImage = GH && GH.user ? `url(${GH.user.avatar_url})` : '';
+  const b = $('tbConn'); b.className = { ok: 'ok', err: 'err', connecting: 'busy' }[conn.s] || '';
+  q('span', b).textContent = conn.s === 'ok' ? 'Connected' : conn.s === 'connecting' ? 'Connecting…' : conn.s === 'err' ? 'Reconnect' : 'Connect';
+  b.title = conn.s === 'ok' ? 'Python runtime ready · ' + fmt(conn.ms) : conn.s === 'err' ? conn.msg : 'Connect to the Python runtime';
+  sh.classList.toggle('nooutputs', outHide);
+  qa('#shRail .ib').forEach(x => x.classList.toggle('on', x.dataset.r === view || x.dataset.r === drView || (x.dataset.r === 'eye' && outHide)));
+}
+
+/* =============================== menus =============================== */
+function closePop() { const m = $('shpop'); if (m) m.remove(); }
+function popMenu(r, items) {
+  closePop(); const m = document.createElement('div'); m.id = 'shpop';
+  items.forEach(it => { if (it === '-') return m.appendChild(document.createElement('hr')); const b = document.createElement('button'); b.innerHTML = `<span>${esc(it[0])}</span><em>${esc(it[2] || '')}</em>`; b.onclick = () => { closePop(); try { it[1](); } catch (e) { toast(e.message); } }; m.appendChild(b); });
+  document.body.appendChild(m);
+  m.style.left = Math.max(8, Math.min(r.left, innerWidth - m.offsetWidth - 8)) + 'px'; m.style.top = Math.max(8, Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8)) + 'px';
+}
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#shpop')) closePop(); });
+addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
+const menuAt = (el, items) => popMenu(el.getBoundingClientRect(), items);
+
+/* =============================== cell ops =============================== */
+function addCell(type, at, focus, src = '') {
+  const c = mk(type, src); at = Math.max(0, Math.min(at, NB.cells.length)); NB.cells.splice(at, 0, c); NB.sel = at; if (type === 'md' && focus) c.edit = true;
+  render(true); changed(); const el = q(`.sc[data-i="${at}"]`, shc);
+  if (el) { el.scrollIntoView({ block: 'nearest' }); if (focus) { const t = q('textarea', el); t && t.focus(); } }
+}
+function moveCell(i, d) { const j = i + d; if (j < 0 || j >= NB.cells.length) return; [NB.cells[i], NB.cells[j]] = [NB.cells[j], NB.cells[i]]; NB.sel = j; render(true); changed(); }
+async function delCell(i) {
+  const c = NB.cells[i]; if (c.src.trim() && !await dialog({ title: 'Delete cell?', msg: 'This cell will be removed.', ok: 'Delete', danger: true })) return;
+  NB.cells.splice(i, 1); if (!NB.cells.length) NB.cells.push(mk('code')); NB.sel = Math.min(i, NB.cells.length - 1); render(true); changed();
+}
+function dupCell(i) { const c = NB.cells[i], n = mk(c.type, c.src); NB.cells.splice(i + 1, 0, n); NB.sel = i + 1; render(true); changed(); }
+function convCell(i) { const c = NB.cells[i]; c.type = c.type === 'code' ? 'md' : 'code'; c.out = []; c.time = null; c.ec = null; c.ok = false; c.edit = false; render(true); changed(); }
+function clearOut(c) { c.out = []; c.time = null; }
+function nextCell(i) {
+  if (i >= NB.cells.length - 1) return addCell('code', i + 1, true);
+  selCell(i + 1); const el = q(`.sc[data-i="${i + 1}"]`, shc); el.scrollIntoView({ block: 'nearest' }); const t = NB.cells[i + 1].type === 'code' && q('textarea', el); t && t.focus();
+}
+function cellMenu(btn, i) {
+  const c = NB.cells[i];
+  menuAt(btn, [['Duplicate cell', () => dupCell(i)], [c.type === 'code' ? 'Convert to text cell' : 'Convert to code cell', () => convCell(i)], ['Clear output', () => { clearOut(c); refreshCell(c); changed(); }], '-', ['Run this and cells below', () => runSeq(range(i, NB.cells.length))], ['Insert code cell below', () => addCell('code', i + 1, true)], ['Insert text cell below', () => addCell('md', i + 1, true)]]);
+}
+const range = (a, b) => Array.from({ length: Math.max(0, b - a) }, (_, k) => a + k);
+
+shc.addEventListener('click', e => {
+  const cell = e.target.closest('.sc'), i = cell ? +cell.dataset.i : -1, b = e.target.closest('[data-a]'), a = b && b.dataset.a;
+  if (a === 'addcode') return addCell('code', NB.cells.length, true);
+  if (a === 'addtext') return addCell('md', NB.cells.length, true);
+  if (i < 0) return; if (i !== NB.sel) selCell(i);
+  const c = NB.cells[i];
+  if (a === 'run') c.run ? interrupt() : runCell(i);
+  else if (a === 'up') moveCell(i, -1); else if (a === 'down') moveCell(i, 1);
+  else if (a === 'edit') { if (c.type === 'md') { c.edit = true; render(true); } const t = q(`.sc[data-i="${i}"] textarea`, shc); t && t.focus(); }
+  else if (a === 'del') delCell(i); else if (a === 'more') cellMenu(b, i);
+  else if (a === 'fold') { c.fold = !c.fold; render(true); }
+});
+shc.addEventListener('dblclick', e => { const v = e.target.closest('.mdv'); if (!v) return; const i = +v.closest('.sc').dataset.i, c = NB.cells[i]; if (c.edit) return; c.edit = true; render(true); const t = q(`.sc[data-i="${i}"] textarea`, shc); t && t.focus(); });
+shc.addEventListener('focusin', e => { if (e.target.matches('.sta,.mta')) { const i = +e.target.closest('.sc').dataset.i; if (i !== NB.sel) selCell(i); } });
+shc.addEventListener('focusout', e => {
+  if (!e.target.matches('.mta')) return; const c = NB.cells[+e.target.closest('.sc').dataset.i];
+  setTimeout(() => { if (!c || !c.edit) return; const ae = document.activeElement, cur = q(`.sc[data-i="${NB.cells.indexOf(c)}"]`, shc); if (cur && ae && cur.contains(ae)) return; c.edit = false; render(true); }, 120);
+});
+shc.addEventListener('input', e => {
+  const t = e.target; if (!t.matches('.sta,.mta')) return; const c = NB.cells[+t.closest('.sc').dataset.i]; c.src = t.value;
+  if (t.classList.contains('sta')) q('.shl', t.parentNode).innerHTML = hl(c.src); else q('.mdv', t.closest('.sbox')).innerHTML = mdr(c.src);
+  fit1(t); changed(); if (view === 'toc') drawPanel(); else if (view === 'find') findRes();
+});
+shc.addEventListener('keydown', e => {
+  const t = e.target; if (!t.matches('.sta,.mta')) return; const i = +t.closest('.sc').dataset.i, c = NB.cells[i], code = c.type === 'code';
+  if (e.key === 'Enter' && (e.shiftKey || e.altKey) && !MOD(e)) {
+    e.preventDefault(); if (code) runCell(i); else { c.edit = false; render(true); }
+    return e.altKey ? addCell('code', i + 1, true) : nextCell(i);
+  }
+  if (e.key === 'Escape') { e.preventDefault(); if (code) t.blur(); else { c.edit = false; render(true); } return; }
+  if (MOD(e) || e.altKey) return;
+  const v = t.value, s = t.selectionStart, ls = v.lastIndexOf('\n', s - 1) + 1, line = v.slice(ls, s);
+  if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertText', false, '    '); }
+  else if (e.key === 'Enter' && code) { e.preventDefault(); document.execCommand('insertText', false, '\n' + line.match(/^\s*/)[0] + (/:\s*$/.test(line) ? '    ' : '')); }
+  else if (e.key === 'Enter' && !code) {
+    const m = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/); if (!m) return; e.preventDefault();
+    if (!m[3].trim()) { t.setSelectionRange(ls, s); document.execCommand('insertText', false, ''); }
+    else document.execCommand('insertText', false, '\n' + m[1] + (/^\d/.test(m[2]) ? (parseInt(m[2]) + 1) + m[2].slice(-1) : m[2]) + ' ');
+  }
+});
+/* intercept app-level shortcuts while the shell is open */
+document.addEventListener('keydown', e => {
+  if (!sh.classList.contains('on') || typeof e.key !== 'string' || !MOD(e)) return; const k = e.key.toLowerCase(), modal = document.querySelector('.ov');
+  if (k === 's') { e.preventDefault(); e.stopPropagation(); if (!modal) saveDlg(); }
+  else if (k === 'enter') { e.preventDefault(); e.stopPropagation(); if (!modal) runCell(NB.sel); }
+  else if (k === 'f') { e.preventDefault(); e.stopPropagation(); if (!modal) { view = 'find'; drawPanel(); head(); } }
+}, true);
+addEventListener('resize', debounce2(() => sh.classList.contains('on') && fit(), 150));
+
+/* =============================== execution =============================== */
+const b64 = s => bytesToB64(new TextEncoder().encode(s));
+async function pyExec(code, o = {}) {
+  const prev = share ? NB.cells.slice(0, o.upto ?? NB.cells.length).filter(c => c.type === 'code' && c.ok).map(c => c.src).concat(o.extra || []) : (o.extra || []);
+  const prog = [
+    'import io as __io, contextlib as __cl, json as __j, base64 as __b',
+    "__g={'__name__':'__main__'}; __g['__g']=__g",
+    `__prev=__j.loads(__b.b64decode('${b64(JSON.stringify(prev))}').decode())`,
+    `__c=__b.b64decode('${b64(code)}').decode()`,
+    'with __cl.redirect_stdout(__io.StringIO()), __cl.redirect_stderr(__io.StringIO()):',
+    '    for __p in __prev:', '        try: exec(__p,__g)', '        except BaseException: pass',
+    ...(o.repl ? ['try:', '    __r=eval(compile(__c,"<shell>","eval"),__g)', '    if __r is not None: print(repr(__r))', 'except SyntaxError:', '    exec(__c,__g)'] : ['exec(__c,__g)']),
+  ].join('\n');
+  const res = await fetch(CONFIG.pythonBackend + '/run-python', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: prog }), signal: o.signal });
+  if (!res.ok) throw Error('Runtime responded with HTTP ' + res.status);
+  const d = await res.json(); conn = { s: 'ok', ms: conn.ms || 0 }; return d;
+}
+async function runCell(i) {
+  const c = NB.cells[i]; if (!c || c.type !== 'code' || c.run) return;
+  if (busy) return toast('Another cell is still running');
+  if (!c.src.trim()) { clearOut(c); c.ok = false; refreshCell(c); return; }
+  busy = true; c.run = true; c.out = []; c.time = null; const t0 = performance.now(); refreshCell(c);
+  const tick = setInterval(() => { const el = q(`.sc[data-i="${NB.cells.indexOf(c)}"] [data-t]`, shc); if (el) el.textContent = 'Running… ' + fmt(performance.now() - t0); }, 100);
+  abortCtl = new AbortController();
+  try {
+    const d = await pyExec(c.src, { upto: i, signal: abortCtl.signal }), text = d.error || d.output || '';
+    c.ok = !d.error && !/Traceback \(most recent call last\)/.test(text);
+    if (text) c.out.push({ t: c.ok ? 'stdout' : 'error', text });
+  } catch (er) {
+    c.ok = false; const ab = er.name === 'AbortError'; if (!ab) conn = { s: 'err', msg: er.message };
+    c.out = [{ t: 'error', text: ab ? 'Execution interrupted.' : 'Runtime error: ' + er.message }];
+  } finally { clearInterval(tick); c.run = false; c.time = performance.now() - t0; c.ec = c.ok ? ++counter : c.ec; abortCtl = null; busy = false; refreshCell(c); changed(); }
+}
+async function runSeq(idx) {
+  if (busy) return toast('A cell is already running'); stopAll = false;
+  for (const i of idx) { if (stopAll) break; const c = NB.cells[i]; if (!c || c.type !== 'code') continue; await runCell(i); if (!c.ok && c.src.trim()) break; }
+}
+function interrupt() { stopAll = true; if (abortCtl) abortCtl.abort(); else toast('Nothing is running'); }
+function restart() { if (abortCtl) abortCtl.abort(); NB.cells.forEach(c => { c.ok = false; c.ec = null; }); counter = 0; termHist = []; render(true); toast('Session restarted — variables cleared'); }
+async function connect() {
+  if (conn.s === 'connecting') return; conn = { s: 'connecting' }; head(); const t0 = performance.now();
+  try {
+    const r = await fetch(CONFIG.pythonBackend + '/run-python', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'print("ok")' }) }), d = await r.json();
+    if (!r.ok || d.error) throw Error(d.error || 'HTTP ' + r.status); conn = { s: 'ok', ms: performance.now() - t0 };
+  } catch (e) { conn = { s: 'err', msg: 'Runtime unreachable: ' + e.message }; }
+  head();
+}
+
+/* =============================== side panels =============================== */
+function drawPanel() {
+  const p = $('shPn'); p.classList.toggle('on', !!view); if (!view) return;
+  if (view === 'toc') {
+    const items = []; NB.cells.forEach((c, i) => { if (c.type === 'md') c.src.split('\n').forEach(l => { const m = l.match(/^(#{1,6})\s+(.*)/); if (m) items.push({ i, d: m[1].length - 1, t: m[2] }); }); });
+    p.innerHTML = '<div class="ph2">Table of contents</div><div class="pb">' + (items.map((x, k) => `<div class="toci" data-k="${k}" style="padding-left:${8 + x.d * 14}px">${esc(x.t)}</div>`).join('') || '<div class="muted" style="padding:8px">No headings yet. Add a text cell starting with # Title.</div>') + '</div>';
+    p.onclick = e => { const r = e.target.closest('.toci'); if (r) jumpTo(items[+r.dataset.k].i); };
+  } else if (view === 'find' && !q('#fq', p)) {
+    p.innerHTML = '<div class="ph2">Find and replace</div><div class="pb"><input id="fq" placeholder="Find"><input id="fr" placeholder="Replace with"><button class="btn line" id="fa" style="justify-content:center">Replace all</button><div id="fres" style="display:flex;flex-direction:column;gap:2px"></div></div>';
+    q('#fq', p).oninput = findRes;
+    q('#fa', p).onclick = () => {
+      const f = q('#fq', p).value; if (!f) return; const re = new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); let n = 0;
+      NB.cells.forEach(c => { c.src = c.src.replace(re, () => (n++, q('#fr', p).value)); }); render(true); changed(); toast(n + ' replacement(s)'); findRes();
+    };
+    p.onclick = e => { const r = e.target.closest('.toci'); if (r) jumpTo(+r.dataset.i); }; setTimeout(() => q('#fq', p).focus(), 0);
+  } else if (view === 'find') findRes();
+}
+function findRes() {
+  const box = q('#fres'); if (!box) return; const f = q('#fq').value.toLowerCase(), out = [];
+  if (f) NB.cells.forEach((c, i) => c.src.split('\n').forEach(l => { if (out.length < 200 && l.toLowerCase().includes(f)) out.push({ i, l: l.trim().slice(0, 80) }); }));
+  box.innerHTML = out.map(x => `<div class="toci" data-i="${x.i}"><span class="muted">[${x.i + 1}]</span> ${esc(x.l)}</div>`).join('') || (f ? '<div class="muted" style="padding:8px">No matches</div>' : '');
+}
+function jumpTo(i) {
+  const c = NB.cells[i]; if (!c) return; let changedFold = false;
+  for (let k = i - 1; k >= 0; k--) { const m = NB.cells[k].type === 'md' && NB.cells[k].src.match(/^(#{1,6})\s/); if (m && NB.cells[k].fold) { NB.cells[k].fold = false; changedFold = true; } }
+  selCell(i); if (changedFold) render(true); const el = q(`.sc[data-i="${i}"]`, shc); el && el.scrollIntoView({ block: 'center' });
+}
+function drawDr() {
+  const d = $('shDr'); d.classList.toggle('on', !!drView); if (!drView) return head();
+  const isV = drView === 'vars';
+  d.innerHTML = `<div class="dh"><b>${isV ? 'Variables' : 'Terminal'}</b><span class="sp"></span>${isV ? '<button class="btn ghost" id="dRef">Refresh</button>' : '<button class="btn ghost" id="dClr">Clear</button>'}<button class="ib" id="dX" title="Close">×</button></div><div class="db"><pre id="dOut"></pre>${isV ? '' : '<input id="tIn" placeholder="Python — Enter to run (state is shared with notebook cells)" spellcheck="false" autocomplete="off">'}</div>`;
+  q('#dOut', d).textContent = isV ? varOut || 'Press Refresh to list variables.' : termOut || 'Python terminal ready.\n';
+  $('dX').onclick = () => { drView = null; drawDr(); };
+  if (isV) $('dRef').onclick = varsRefresh; else {
+    $('dClr').onclick = () => { termOut = ''; drawDr(); };
+    const inp = $('tIn'); inp.focus();
+    inp.onkeydown = async e => {
+      if (e.key !== 'Enter' || !inp.value.trim()) return; const cmd = inp.value; inp.value = ''; termOut += '>>> ' + cmd + '\n'; q('#dOut').textContent = termOut;
+      try { const dd = await pyExec(cmd, { repl: true, extra: termHist }); const t = dd.error || dd.output || ''; termOut += t + (t && !t.endsWith('\n') ? '\n' : ''); if (!dd.error && !/Traceback/.test(t)) termHist.push(cmd); }
+      catch (er) { termOut += 'Runtime error: ' + er.message + '\n'; }
+      q('#dOut').textContent = termOut; const o = q('.db'); o.scrollTop = o.scrollHeight;
+    };
+  }
+  head();
+}
+async function varsRefresh() {
+  varOut = 'Loading…'; q('#dOut') && (q('#dOut').textContent = varOut);
+  const code = "_r=[f'{k:<18}{type(v).__name__:<12}{repr(v)[:70]}' for k,v in list(__g.items()) if not k.startswith('_')]\nprint('\\n'.join(_r) or '(no variables yet — run some cells first)')";
+  try { const d = await pyExec(code); varOut = d.error || d.output || '(no variables)'; } catch (e) { varOut = 'Runtime error: ' + e.message; }
+  if (drView === 'vars') q('#dOut').textContent = varOut;
+}
+const togView = v => { view = view === v ? null : v; drawPanel(); head(); };
+const togDr = v => { drView = drView === v ? null : v; drawDr(); if (drView === 'vars') varsRefresh(); };
+
+/* =============================== save / open =============================== */
+const jsonOut = () => JSON.stringify(toNb(), null, 1);
+function saveLocal() {
+  const map = store.json('vk_shells', {}); map[NB.name] = { ts: Date.now(), data: jsonOut() };
+  try { localStorage.setItem('vk_shells', JSON.stringify(map)); } catch { throw Error('Browser storage is full — download or publish instead'); }
+}
+async function pushGh() {
+  if (!GH || !GH.token) { ghConnect(); throw Error('Connect GitHub first, then save again'); }
+  const R = `/repos/${GH.user.login}/0x_shells`, path = encodeURIComponent(NB.name + '.ipynb');
+  try { await ghApi(R); } catch (e) { if (e.status !== 404) throw e; await ghApi('/user/repos', { m: 'POST', b: { name: '0x_shells', private: true, auto_init: true, description: 'Notebooks saved from the 0x Loom shell' } }); await sleep(2000); }
+  let sha; try { sha = (await ghApi(`${R}/contents/${path}`)).sha; } catch (e) { if (e.status !== 404) throw e; }
+  const body = { message: (sha ? 'Update ' : 'Add ') + NB.name + '.ipynb', content: b64(jsonOut()) }; if (sha) body.sha = sha;
+  try { await ghApi(`${R}/contents/${path}`, { m: 'PUT', b: body }); } catch (e) { if (e.status !== 404 && e.status !== 409) throw e; await sleep(2500); await ghApi(`${R}/contents/${path}`, { m: 'PUT', b: body }); }
+}
+function saveDlg() {
+  const m = modal('Save notebook'); const g = s => q(s, m.body);
+  m.body.innerHTML = `<label>File name<input id="svN" value="${esc(NB.name)}" spellcheck="false"></label><div class="muted">Where do you want to keep this shell?</div>
+  <div class="svo" data-s="local"><b>Browser storage</b><span>Keep it offline in this browser (localStorage)</span></div>
+  <div class="svo" data-s="file"><b>Download .ipynb</b><span>Save a Jupyter / Colab notebook file to your device</span></div>
+  <div class="svo" data-s="gh"><b>Publish to GitHub</b><span>Private repo <code>0x_shells</code> is created automatically if needed</span></div><div class="er" id="svE"></div>`;
+  m.body.onclick = async e => {
+    const o = e.target.closest('.svo'); if (!o) return; g('#svE').textContent = ''; NB.name = safe(g('#svN').value);
+    try {
+      if (o.dataset.s === 'local') saveLocal(); else if (o.dataset.s === 'file') saveBytes(NB.name + '.ipynb', jsonOut(), 'application/x-ipynb+json');
+      else { o.style.opacity = .5; g('#svE').textContent = 'Publishing…'; await pushGh(); }
+      dirty = false; head(); saveDraft(); m.close(); toast(o.dataset.s === 'local' ? 'Saved in browser' : o.dataset.s === 'file' ? 'Downloaded ' + NB.name + '.ipynb' : 'Published to 0x_shells');
+    } catch (er) { o.style.opacity = 1; g('#svE').textContent = er.message; }
+  };
+  g('#svN').focus(); g('#svN').select();
+}
+const discardOk = async () => !dirty || await dialog({ title: 'Discard unsaved changes?', msg: 'The current shell has changes that were not saved.', ok: 'Discard', danger: true });
+async function loadNb(json, name) {
+  if (!await discardOk()) return false;
+  NB = fromNb(json, name); counter = 0; dirty = false; render(true); saveDraft(); toast('Opened ' + NB.name + '.ipynb'); return true;
+}
+function openDlg() {
+  const m = modal('Open notebook', 'min(640px,96vw)'), g = s => q(s, m.body);
+  m.body.innerHTML = `<div class="split"><button class="btn line" id="opD">Upload from device…</button><span class="muted">.ipynb files</span></div><input type="file" id="opF" accept=".ipynb,application/json" hidden>
+  <div class="muted">Browser</div><div id="opL" style="display:flex;flex-direction:column;gap:6px"></div><div class="muted">GitHub · 0x_shells</div><div id="opG" style="display:flex;flex-direction:column;gap:6px"><div class="muted">Loading…</div></div><div class="er" id="opE"></div>`;
+  const err = t => g('#opE').textContent = t;
+  g('#opD').onclick = () => g('#opF').click();
+  g('#opF').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { if (await loadNb(await f.text(), f.name)) m.close(); } catch (er) { err(er.message); } e.target.value = ''; };
+  const drawLocal = () => { const map = store.json('vk_shells', {}), names = Object.keys(map).sort((a, b) => map[b].ts - map[a].ts);
+    g('#opL').innerHTML = names.map(n => `<div class="card split"><span><b>${esc(n)}.ipynb</b><div class="muted">${new Date(map[n].ts).toLocaleString()}</div></span><span class="ac"><button class="btn pri" data-l="${esc(n)}">Open</button><button class="btn danger" data-x="${esc(n)}">Delete</button></span></div>`).join('') || '<div class="muted">No notebooks saved in this browser.</div>'; };
+  drawLocal();
+  g('#opL').onclick = async e => {
+    const o = e.target.closest('[data-l]'), x = e.target.closest('[data-x]'), map = store.json('vk_shells', {});
+    if (o) { try { if (await loadNb(map[o.dataset.l].data, o.dataset.l)) m.close(); } catch (er) { err(er.message); } }
+    else if (x && await dialog({ title: 'Delete from browser?', msg: x.dataset.x + '.ipynb', ok: 'Delete', danger: true })) { delete map[x.dataset.x]; localStorage.setItem('vk_shells', JSON.stringify(map)); drawLocal(); }
+  };
+  (async () => {
+    const box = g('#opG'); if (!GH || !GH.token) { box.innerHTML = '<button class="btn line" id="opC" style="align-self:flex-start">Connect GitHub</button>'; g('#opC').onclick = () => { m.close(); ghConnect(); }; return; }
+    try {
+      let list = []; try { list = (await ghApi(`/repos/${GH.user.login}/0x_shells/contents`)).filter(f => f.type === 'file' && /\.ipynb$/i.test(f.name)); } catch (e) { if (e.status !== 404) throw e; }
+      box.innerHTML = list.map((f, i) => `<div class="card split"><span><b>${esc(f.name)}</b><div class="muted">${(f.size / 1024).toFixed(1)} KB</div></span><button class="btn pri" data-i="${i}">Open</button></div>`).join('') || '<div class="muted">No notebooks in 0x_shells yet. Save one with “Publish to GitHub”.</div>';
+      box.onclick = async e => { const b = e.target.closest('[data-i]'); if (!b) return; b.disabled = true; const f = list[+b.dataset.i];
+        try { const j = await ghApi(`/repos/${GH.user.login}/0x_shells/git/blobs/${f.sha}`); if (await loadNb(new TextDecoder().decode(b64ToBytes(j.content)), f.name)) m.close(); } catch (er) { err(er.message); } b.disabled = false; };
+    } catch (e) { box.innerHTML = `<div class="er">${esc(e.message)}</div>`; }
+  })();
+}
+async function newNb() { if (!await discardOk()) return; NB = blank(); counter = 0; dirty = false; render(true); saveDraft(); }
+async function renameNb() { const r = await dialog({ title: 'Rename notebook', fields: [{ key: 'n', label: 'Name', val: NB.name }], ok: 'Rename' }); if (r && r.n.trim()) { NB.name = safe(r.n); changed(); } }
+async function askAi() {
+  const r = await dialog({ title: 'Ask AI to write code', fields: [{ key: 'p', label: 'What should the new code cell do?' }], ok: 'Generate' }); if (!r || !r.p.trim()) return;
+  const t0 = performance.now(); toast('Gemini is thinking…');
+  try {
+    if (!window.Loom || !Loom.ai) throw Error('AI is not ready yet'); let t = await Loom.ai.ask('Write Python code for one notebook cell. Reply with only the code inside one ```python block.\nTask: ' + r.p);
+    const m = t.match(/```(?:python|py)?\n([\s\S]*?)```/); t = (m ? m[1] : t).trim(); addCell('code', NB.sel + 1, false, t); toast('Gemini replied in ' + fmt(performance.now() - t0));
+  } catch (e) { toast(e.message); }
+}
+function helpDlg() {
+  const m = modal('Keyboard shortcuts'); m.body.innerHTML = [['Shift + Enter', 'Run cell and move to next'], ['Ctrl/⌘ + Enter', 'Run cell'], ['Alt + Enter', 'Run cell and insert code cell below'], ['Ctrl/⌘ + S', 'Save notebook'], ['Ctrl/⌘ + F', 'Find and replace'], ['Esc', 'Leave editing'], ['Double-click', 'Edit a text cell (Markdown renders as you type)'], ['Tab', 'Indent (4 spaces)']].map(r => `<div class="split"><b>${r[0]}</b><span class="muted">${r[1]}</span></div>`).join('');
+}
+
+/* =============================== wiring =============================== */
+const MENUS = () => ({
+  File: [['New notebook', newNb], ['Open notebook…', openDlg], '-', ['Save…', saveDlg, 'Ctrl S'], ['Download .ipynb', () => { saveBytes(NB.name + '.ipynb', jsonOut(), 'application/x-ipynb+json'); toast('Downloaded'); }], ['Rename…', renameNb], '-', ['Exit shell', closeShell]],
+  Edit: [['Move cell up', () => moveCell(NB.sel, -1)], ['Move cell down', () => moveCell(NB.sel, 1)], ['Duplicate cell', () => dupCell(NB.sel)], ['Delete cell', () => delCell(NB.sel)], '-', ['Clear selected output', () => { clearOut(NB.cells[NB.sel]); refreshCell(NB.cells[NB.sel]); changed(); }], ['Clear all outputs', () => { NB.cells.forEach(clearOut); render(true); changed(); }], '-', ['Find and replace', () => { view = 'find'; drawPanel(); head(); }, 'Ctrl F']],
+  View: [['Table of contents', () => togView('toc')], ['Variables', () => togDr('vars')], ['Terminal', () => togDr('term')], [(outHide ? 'Show' : 'Hide') + ' outputs', () => { outHide = !outHide; head(); }], '-', ['Toggle theme', () => { toggleTheme(); toast('Theme switched'); }]],
+  Insert: [['Code cell', () => addCell('code', NB.sel + 1, true)], ['Text cell', () => addCell('md', NB.sel + 1, true)], ['Code cell above', () => addCell('code', NB.sel, true)], ['Text cell above', () => addCell('md', NB.sel, true)]],
+  Runtime: [['Run all', () => runSeq(range(0, NB.cells.length))], ['Run selected cell', () => runCell(NB.sel), 'Ctrl Enter'], ['Run cells above', () => runSeq(range(0, NB.sel))], ['Run selected cell and below', () => runSeq(range(NB.sel, NB.cells.length))], '-', ['Interrupt execution', interrupt], ['Restart session', restart], '-', [(share ? '✓ ' : '') + 'Share variables between cells', () => { share = !share; toast(share ? 'Cells share variables (cells above are replayed)' : 'Each cell runs in isolation'); }]],
+  Tools: [['Command palette…', () => openPalette(), 'Ctrl K'], ['Ask AI to write code…', askAi], ['Secrets (Tijori)…', () => openSecrets()], ['Settings…', () => openSettings()]],
+  Help: [['Keyboard shortcuts', helpDlg]],
+});
+Object.keys(MENUS()).forEach(n => { const b = document.createElement('button'); b.textContent = n; b.onclick = () => menuAt(b, MENUS()[n]); $('shMenus').appendChild(b); });
+[['toc', IC.list, 'Table of contents', () => togView('toc')], ['find', IC.find, 'Find and replace', () => togView('find')], ['vars', IC.code, 'Variables', () => togDr('vars')], ['eye', IC.eye, 'Show / hide outputs', () => { outHide = !outHide; head(); }], ['key', IC.key, 'Secrets', () => openSecrets()], ['files', IC.folder, 'Open notebook', openDlg], ['term', IC.term, 'Terminal', () => togDr('term')]]
+  .forEach(([id, ic, t, fn]) => { const b = document.createElement('button'); b.className = 'ib'; b.dataset.r = id; b.title = t; b.innerHTML = ic; b.onclick = fn; $('shRail').appendChild(b); });
+$('shLogo').onclick = closeShell; $('shName').onclick = renameNb; $('shStar').onclick = () => { NB.star = !NB.star; changed(); };
+$('shCloud').onclick = saveDlg; $('shSave').onclick = saveDlg; $('shHelp').onclick = helpDlg; $('shSet').onclick = () => { toggleTheme(); toast('Theme switched'); };
+$('tbCmd').onclick = () => openPalette(); $('tbCode').onclick = () => addCell('code', NB.sel + 1, true); $('tbText').onclick = () => addCell('md', NB.sel + 1, true);
+$('tbCodeC').onclick = e => menuAt(e.currentTarget, [['Code cell', () => addCell('code', NB.sel + 1, true)], ['Text cell', () => addCell('md', NB.sel + 1, true)], ['Code cell above', () => addCell('code', NB.sel, true)], ['Text cell above', () => addCell('md', NB.sel, true)]]);
+$('tbRun').onclick = () => runSeq(range(0, NB.cells.length));
+$('tbRunC').onclick = e => menuAt(e.currentTarget, MENUS().Runtime.slice(0, 7));
+$('tbConn').onclick = connect;
+$('tbConnC').onclick = e => menuAt(e.currentTarget, [['Reconnect', connect], ['Interrupt execution', interrupt], ['Restart session', restart], ['Variables', () => togDr('vars')], ['Terminal', () => togDr('term')]]);
+$('tbCol').onclick = () => sh.classList.toggle('compact');
+$('ftVar').onclick = () => togDr('vars'); $('ftTerm').onclick = () => togDr('term'); $('shFab').onclick = askAi;
+
+function openShell() {
+  sh.classList.add('on'); document.body.classList.add('shellopen');
+  if (!booted) { booted = true; const d = store.json('vk_shell_draft', null); if (d && d.nb && Array.isArray(d.nb.cells)) { try { NB = fromNb(d.nb, d.name); dirty = !!d.dirty; } catch {} } }
+  render(true); if (conn.s === 'idle' || conn.s === 'err') connect();
+}
+function closeShell() { closePop(); sh.classList.remove('on'); document.body.classList.remove('shellopen'); }
+addEventListener('beforeunload', e => { if (sh.classList.contains('on') && dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+/* =============================== traffic manager frame =============================== */
+async function openTraffic(change) {
+  let url = store.get('vk_traffic_url') || TRAFFIC_URL;
+  if (!url || change) {
+    const r = await dialog({ title: 'Traffic manager URL', msg: 'Address of your traffic manager. It opens full screen inside 0x Loom.', fields: [{ key: 'u', label: 'URL', val: url || 'https://' }], ok: 'Open' }); if (!r) return;
+    let u; try { u = new URL(r.u.trim()); if (!/^https?:$/.test(u.protocol)) throw 0; } catch { return toast('Enter a valid http(s) URL'); }
+    url = u.href; store.set('vk_traffic_url', url);
+  }
+  let ov = $('tmv');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'tmv';
+    ov.innerHTML = '<div class="tmh"><b>Traffic manager</b><span class="sp"></span><button class="btn ghost" data-t="r">Reload</button><button class="btn ghost" data-t="c">Change URL</button><button class="btn ghost" data-t="n">Open in tab</button><button class="btn ghost" data-t="x">×</button></div><iframe title="Traffic manager" allow="clipboard-write; fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"></iframe>';
+    document.body.appendChild(ov);
+    ov.onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; const f = q('iframe', ov), t = b.dataset.t;
+      if (t === 'r') f.src = f.src; else if (t === 'c') openTraffic(true); else if (t === 'n') window.open(store.get('vk_traffic_url') || f.src, '_blank', 'noopener'); else { ov.classList.remove('on'); f.src = 'about:blank'; } };
+  }
+  q('iframe', ov).src = url; ov.classList.add('on');
+}
+
+/* =============================== home cards + commands =============================== */
+const cards = document.createElement('div'); cards.className = 'tcards';
+cards.innerHTML = [['shell', IC.term, 'Open shell', 'Python & Markdown notebooks'], ['traffic', IC.globe, 'Traffic manager', 'Full-screen frame'], ['ext', IC.cust, 'Extensions', 'Browse, install & edit']]
+  .map(c => `<button class="tcard" data-c="${c[0]}">${c[1]}<b>${c[2]}</b><span>${c[3]}</span></button>`).join('');
+cards.onclick = e => {
+  const c = e.target.closest('[data-c]'); if (!c) return;
+  if (c.dataset.c === 'shell') openShell(); else if (c.dataset.c === 'traffic') openTraffic();
+  else { const b = [...document.querySelectorAll('.nav .btn')].find(x => /Customize|Extensions/.test(x.textContent)); b ? b.click() : toast('Extensions not available'); }
+};
+$('welcome').appendChild(cards);
+COMMANDS.push(['Shell', 'Open 0x Shell', openShell], ['Shell', 'New notebook', () => { openShell(); newNb(); }], ['Shell', 'Open notebook…', () => { openShell(); openDlg(); }], ['Tools', 'Traffic manager', () => openTraffic()]);
+window.LoomShell = { open: openShell, close: closeShell, traffic: openTraffic };
+})();
+</script>
+<!-- ===== end patch v6 ===== -->
 </body>
 </html>
