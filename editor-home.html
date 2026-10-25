@@ -3317,5 +3317,270 @@ window.LoomShell = { open: openShell, close: closeShell, traffic: openTraffic };
 })();
 </script>
 <!-- ===== end patch v6 ===== -->
+ <!-- ===== 0x Loom patch v7: Extension Studio, ownership, README, safety scan =====
+ Paste right before </body>, AFTER patch v6. Run the SQL below ONCE in Supabase (SQL editor).
+
+-- ---------- SQL: server-side ownership (this is what really locks editing to the creator) ----------
+create extension if not exists pgcrypto;
+alter table extensions add column if not exists owner_hash text;
+alter table extensions add column if not exists tags text default '';
+alter table extensions add column if not exists rating numeric default 0;
+alter table extensions add column if not exists votes int default 0;
+create table if not exists ext_votes(ext_id text, voter text, stars int, primary key(ext_id, voter));
+-- stop anonymous direct writes; everything goes through the functions below
+drop policy if exists rw on extensions;
+create policy read_all on extensions for select using (true);
+drop function if exists publish_extension(text,text,text,text,text,text,text,text,text);
+create or replace function publish_extension(p_id text,p_name text,p_version text,p_description text,p_author text,
+  p_code text,p_logo text,p_readme text,p_token text,p_tags text default '') returns void
+language plpgsql security definer as $$
+declare h text := encode(digest(p_token,'sha256'),'hex'); cur text;
+begin
+  select owner_hash into cur from extensions where id=p_id;
+  if cur is not null and cur <> h then raise exception 'Only the publisher of this extension can update it'; end if;
+  insert into extensions(id,name,version,description,author,code,logo,readme,tags,owner_hash,updated_at)
+  values(p_id,p_name,p_version,p_description,p_author,p_code,p_logo,p_readme,p_tags,h,now())
+  on conflict(id) do update set name=excluded.name,version=excluded.version,description=excluded.description,
+   code=excluded.code,logo=excluded.logo,readme=excluded.readme,tags=excluded.tags,updated_at=now();
+end $$;
+create or replace function unpublish_extension(p_id text,p_token text) returns void
+language plpgsql security definer as $$
+begin
+  delete from extensions where id=p_id and owner_hash=encode(digest(p_token,'sha256'),'hex');
+  if not found then raise exception 'Only the publisher can unpublish this extension'; end if;
+end $$;
+create or replace function rate_extension(p_id text,p_stars int,p_token text) returns void
+language plpgsql security definer as $$
+begin
+  insert into ext_votes values(p_id,encode(digest(p_token,'sha256'),'hex'),least(5,greatest(1,p_stars)))
+  on conflict(ext_id,voter) do update set stars=excluded.stars;
+  update extensions set votes=(select count(*) from ext_votes where ext_id=p_id),
+    rating=(select round(avg(stars),1) from ext_votes where ext_id=p_id) where id=p_id;
+end $$;
+-- (extension_installed from before keeps working; make sure it is security definer too)
+-->
+<style id="loom-v7">
+[data-edit]{display:none!important}
+.xtbl{border-collapse:collapse;margin:8px 0;display:block;overflow:auto}.xtbl th,.xtbl td,.xvb th,.xvb td{border:1px solid var(--line);padding:5px 10px}.xvb th{background:var(--hover)}
+.xvb pre{background:var(--side);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font:12.5px/1.5 var(--mono)}
+.xvb blockquote{margin:6px 0;padding:2px 12px;border-left:3px solid var(--line);color:var(--mut)}
+.bdg{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;border:1px solid var(--line);color:var(--mut);margin-right:4px}
+.bdg.High{color:var(--err);border-color:var(--err)}.bdg.Medium{color:var(--warn);border-color:var(--warn)}.bdg.Low,.bdg.own{color:var(--s);border-color:var(--s)}
+#xst{position:fixed;inset:0;z-index:38;background:var(--bg);display:none;flex-direction:column;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}#xst.on{display:flex;animation:fade .25s}
+.xsh{display:flex;align-items:center;gap:6px;padding:8px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}.xsh .sp{flex:1}
+.xsb{flex:1;min-height:0;display:grid;grid-template-columns:290px 1fr}
+.xss{border-right:1px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto;background:var(--side)}
+.xsm{display:flex;flex-direction:column;min-width:0;min-height:0}.xst{display:flex;gap:4px;padding:8px 12px}.xsc{flex:1;min-height:0;overflow:auto;position:relative}
+.xse{display:grid;grid-template-columns:48px 1fr;font:13px/20px var(--mono);min-height:100%}
+.xse .g{color:var(--mut);text-align:right;padding:12px 8px 12px 0;margin:0;opacity:.7;font:inherit}
+.xse .w{display:grid;padding:12px 16px 40px 8px}.xse .w>*{grid-area:1/1;margin:0;padding:0;border:0;border-radius:0;background:none;font:inherit;white-space:pre;overflow:hidden;width:100%}
+.xse .h{pointer-events:none}.xse textarea{color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--acc);resize:none;outline:none}
+.xrd{display:grid;grid-template-columns:1fr 1fr;height:100%}.xrd textarea{border-radius:0;border:0;border-right:1px solid var(--line);font:13px/1.55 var(--mono);resize:none;height:100%}.xrd .xvb{padding:14px 18px;overflow:auto}
+.xsf{display:flex;gap:12px;padding:4px 14px;border-top:1px solid var(--line);color:var(--mut);font-size:12px}.xsf .er{flex:1}
+@media(max-width:800px){.xsb{grid-template-columns:1fr}.xss{max-height:34vh;border-right:0;border-bottom:1px solid var(--line)}.xrd{grid-template-columns:1fr}}
+</style>
+<script>
+(() => {
+const $ = id => document.getElementById(id), q = (s, r = document) => r.querySelector(s), qa = (s, r = document) => [...r.querySelectorAll(s)];
+if (!window.LoomExt) return;
+const AF = Object.getPrototypeOf(async function () {}).constructor, REST = CONFIG.supabaseUrl + '/rest/v1/';
+const HD = { apikey: CONFIG.supabaseAnon, Authorization: 'Bearer ' + CONFIG.supabaseAnon, 'Content-Type': 'application/json' };
+const rpc = async (n, b) => { const r = await fetch(REST + 'rpc/' + n, { method: 'POST', headers: HD, body: JSON.stringify(b) }), j = await r.json().catch(() => ({})); if (!r.ok) throw Error(j.message || n + ' failed (' + r.status + ')'); return j; };
+const pk = () => { let t = store.get('loom_pub_key'); if (!t) { t = [...crypto.getRandomValues(new Uint8Array(24))].map(b => b.toString(16).padStart(2, '0')).join(''); store.set('loom_pub_key', t); } return t; };
+const sha = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, '0')).join('');
+let myHash = ''; sha(pk()).then(h => myHash = h);
+const ownedSet = () => new Set(store.json('loom_owned', [])), own = id => { const s = ownedSet(); s.add(id); store.set('loom_owned', JSON.stringify([...s])); };
+const remote = new Map(), packIds = new Set((window.LOOM_PACK || []).map(x => x.id)), installed = id => LoomExt.list.find(e => e.id === id);
+const isOwner = id => { const r = remote.get(id); return (r && r.owner_hash && r.owner_hash !== myHash) ? false : ownedSet().has(id) || !!(r && r.owner_hash === myHash); };
+const byName = n => LoomExt.list.find(e => e.name === n) || [...remote.values()].find(e => e.name === n) || (window.LOOM_PACK || []).find(e => e.name === n);
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+const persist = () => store.set('loom_ext_v1', JSON.stringify(LoomExt.list));
+async function loadRemote() { try { const j = await (await fetch(REST + 'extensions?select=*&limit=300', { headers: HD })).json(); if (Array.isArray(j)) j.forEach(x => remote.set(x.id, x)); } catch {} }
+
+/* ---------- safety scan ---------- */
+const RISK = [[/vault/i, 'Reads your Tijori vault', 3], [/backend\.github|\bGH\b/, 'Uses your GitHub token', 3], [/\beval\b|new Function|\bAF\(/, 'Runs dynamic code', 2], [/fetch\(|backend\.fetch|XMLHttpRequest|WebSocket/, 'Makes network requests', 2], [/fs\.(write|remove|edit|rename)/, 'Changes your files', 1], [/Loom\.ai\./, 'Sends code to Gemini', 1], [/localStorage|cookie/, 'Touches browser storage', 2]];
+const scan = c => { const h = RISK.filter(r => r[0].test(c || '')), s = h.reduce((a, r) => a + r[2], 0); return { hits: h.map(r => r[1]), level: s >= 5 ? 'High' : s >= 2 ? 'Medium' : 'Low' }; };
+const scanHtml = c => { const s = scan(c); return `<span class="bdg ${s.level}">Safety: ${s.level} risk</span>` + (s.hits.length ? '<ul style="margin:4px 0;padding-left:18px">' + s.hits.map(h => `<li>${esc(h)}</li>`).join('') + '</ul>' : '<div class="muted">No sensitive APIs detected.</div>'); };
+
+/* ---------- README renderer ---------- */
+const md2 = s => {
+  const inl = t => esc(t).replace(/!\[([^\]]*)\]\((https:\/\/[^\s)]+)\)/g, '<img alt="$1" src="$2" style="max-width:100%;border-radius:8px">').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>').replace(/~~([^~]+)~~/g, '<s>$1</s>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const L = String(s || '').split('\n'); let o = '', i = 0, list = null; const cl = () => { if (list) { o += `</${list}>`; list = null; } };
+  while (i < L.length) {
+    const l = L[i]; let m;
+    if (/^\s*```/.test(l)) { cl(); const lang = l.replace(/^\s*```/, '').trim() || 'js', b = []; i++; while (i < L.length && !/^\s*```/.test(L[i])) b.push(L[i++]); i++; let h; try { h = window.hljs && hljs.getLanguage(lang) ? hljs.highlight(b.join('\n'), { language: lang, ignoreIllegals: true }).value : esc(b.join('\n')); } catch { h = esc(b.join('\n')); } o += `<pre><code>${h}</code></pre>`; continue; }
+    if (l.includes('|') && /^\s*\|?\s*:?-{2,}/.test(L[i + 1] || '')) { cl(); const row = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim()); let t = '<table class="xtbl"><tr>' + row(l).map(c => `<th>${inl(c)}</th>`).join('') + '</tr>'; i += 2; while (i < L.length && L[i].includes('|')) t += '<tr>' + row(L[i++]).map(c => `<td>${inl(c)}</td>`).join('') + '</tr>'; o += t + '</table>'; continue; }
+    if ((m = l.match(/^(#{1,6})\s+(.*)/))) { cl(); o += `<h${m[1].length} id="${slug(m[2])}">${inl(m[2])}</h${m[1].length}>`; }
+    else if (/^\s*([-*_])\1{2,}\s*$/.test(l)) { cl(); o += '<hr>'; }
+    else if ((m = l.match(/^\s*[-*+]\s+(\[[ xX]\]\s+)?(.*)/))) { if (list !== 'ul') { cl(); o += '<ul>'; list = 'ul'; } o += '<li>' + (m[1] ? `<input type="checkbox" disabled style="width:auto" ${/x/i.test(m[1]) ? 'checked' : ''}> ` : '') + inl(m[2]) + '</li>'; }
+    else if ((m = l.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== 'ol') { cl(); o += '<ol>'; list = 'ol'; } o += `<li>${inl(m[1])}</li>`; }
+    else if ((m = l.match(/^>\s?(.*)/))) { cl(); o += `<blockquote>${inl(m[1])}</blockquote>`; }
+    else if (!l.trim()) cl(); else { cl(); o += `<p>${inl(l)}</p>`; }
+    i++;
+  }
+  cl(); return o || '<p class="muted">No README.</p>';
+};
+
+/* ---------- extension detail tab: rich README, badges, owner-only actions ---------- */
+const xv = $('xview');
+function upgradeView() {
+  const t = q('.xvt', xv), b = q('.xvb', xv); if (!t || !b || b.dataset.v7 === t.textContent) return;
+  const x = byName(t.textContent); if (!x) return; b.dataset.v7 = t.textContent; const r = remote.get(x.id) || {}, inst = installed(x.id);
+  b.innerHTML = md2(x.readme || r.readme || '# ' + x.name + '\n\n' + (x.description || ''));
+  const meta = `<div style="margin:8px 0">${scanHtml(x.code || r.code)}${isOwner(x.id) && inst ? '<span class="bdg own">You own this</span>' : ''}${r.rating ? `<span class="bdg">★ ${r.rating} (${r.votes})</span>` : ''}${r.installs ? `<span class="bdg">${r.installs} installs</span>` : ''}${(r.tags || x.tags || '').split(',').filter(Boolean).map(g => `<span class="bdg">${esc(g.trim())}</span>`).join('')}</div>`;
+  q('.xva', xv).insertAdjacentHTML('beforebegin', meta);
+  const a = q('.xva', xv), add = (l, fn, c = 'line') => { const k = document.createElement('button'); k.className = 'btn ' + c; k.textContent = l; k.onclick = fn; a.appendChild(k); };
+  if (inst) { isOwner(x.id) ? add('Studio', () => openStudio(x.id), 'pri') : add('Fork to edit', () => fork(x.id)); if (r.version && newer(r.version, inst.version) && !isOwner(x.id)) add('Update to v' + r.version, () => update(x.id), 'pri'); }
+  add('Share link', () => navigator.clipboard.writeText(location.origin + location.pathname + '#ext=' + x.id).then(() => toast('Install link copied'), () => toast('Copy blocked')));
+  add('Export', () => saveBytes(x.id + '.loomext', JSON.stringify(inst || x), 'application/json'));
+  if (r.id) { const s = document.createElement('div'); s.style.marginTop = '8px'; s.innerHTML = 'Rate: ' + [1, 2, 3, 4, 5].map(n => `<button class="btn ghost" data-st="${n}" style="padding:0 4px">☆</button>`).join(''); s.onclick = async e => { const n = e.target.closest('[data-st]'); if (!n) return; try { await rpc('rate_extension', { p_id: x.id, p_stars: +n.dataset.st, p_token: pk() }); toast('Thanks for rating'); } catch (er) { toast(er.message); } }; a.after(s); }
+}
+if (xv) new MutationObserver(() => upgradeView()).observe(xv, { childList: true });
+async function update(id) { const r = remote.get(id), e = installed(id); if (!r || !e) return; await LoomExt.install({ ...e, ...['name', 'description', 'author', 'version', 'code', 'logo', 'readme', 'tags'].reduce((o, k) => (o[k] = r[k], o), {}) }); toast('Updated ' + r.name); renderAll(); }
+async function fork(id) { const e = installed(id); if (!e) return; const nid = id + '-fork-' + Math.random().toString(36).slice(2, 5); await LoomExt.install({ ...e, id: nid, name: e.name + ' (fork)', author: GH?.user?.login || 'me', version: '1.0.0' }); own(nid); toast('Forked — you own this copy'); openStudio(nid); }
+
+/* install dialog: show safety scan */
+new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+  if (!(n instanceof HTMLElement) || !n.classList.contains('ov')) return; const t = (q('.mh b', n) || {}).textContent || '';
+  if (!t.startsWith('Install ')) return; const x = byName(t.slice(8, -1)); if (x) q('.mb', n).insertAdjacentHTML('afterbegin', `<div class="card">${scanHtml(x.code)}</div>`);
+}))).observe(document.body, { childList: true });
+
+/* sidebar rows: Studio button for owned extensions, ★ badge for updates */
+const xl = $('xl'), deco = () => xl && qa('.xi', xl).forEach(r => {
+  const id = r.dataset.id; if (!installed(id)) return; const rm = remote.get(id);
+  if (isOwner(id) && !q('[data-xs]', r)) { const b = document.createElement('button'); b.className = 'btn xedit'; b.dataset.xs = id; b.textContent = 'Studio'; r.appendChild(b); }
+  if (rm && !isOwner(id) && newer(rm.version, installed(id).version) && !q('.upd', r)) q('.ds', r).insertAdjacentHTML('beforebegin', '<div class="bdg upd Medium">Update available</div>');
+});
+if (xl) new MutationObserver(deco).observe(xl, { childList: true });
+/* capture before every older handler: lock edit/publish of old buttons to owners */
+addEventListener('click', e => {
+  const s = e.target.closest('[data-xs]'); if (s) { e.stopImmediatePropagation(); e.preventDefault(); return openStudio(s.dataset.xs); }
+  const b = e.target.closest('.mc [data-a="pub"],.mc [data-a="edit"],.mc [data-a="save"]'); if (!b) return;
+  const x = LoomExt.list[+b.dataset.i]; if (b.dataset.a === 'save' || !x) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  isOwner(x.id) ? openStudio(x.id) : toast('Only the creator can edit or publish this extension. Use Fork to make your own copy.');
+}, true);
+
+/* ---------- Studio ---------- */
+const TPL = {
+  'Command': "Loom.ui.command('My tools', 'Say hello', () => Loom.ui.toast('Hello from ' + ext.name));\n",
+  'Side panel': "const p = Loom.ui.panel({ title: ext.name, render: b => { b.style.padding = '12px'; b.innerHTML = '<div class=\"muted\">Hello panel</div>'; } });\nLoom.ui.command('View', 'Toggle ' + ext.name, () => p.toggle());\n",
+  'Status bar item': "const s = Loom.ui.statusItem('');\nconst u = () => s.set((Loom.editor.get() || '').length + ' chars');\nLoom.on('file:change', u); Loom.on('file:open', () => setTimeout(u, 60)); u();\n",
+  'Text transform': "Loom.ui.command('Text', 'Reverse selection', () => Loom.editor.transform(t => [...t].reverse().join('')));\n",
+  'AI command': "Loom.ui.command('AI', 'Summarize file', async () => { Loom.ui.toast('Thinking…'); try { Loom.ui.modal('Summary').body.textContent = await Loom.ai.ask('Summarize:\\n' + Loom.editor.get()); } catch (e) { Loom.ui.toast(e.message); } });\n",
+  'Theme': "Loom.ui.vars({ bg: '#101820', acc: '#fee715', 'on-acc': '#101820' });\n",
+};
+const st = $('xst') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'xst' }));
+let D = null, tab = 'code', dirty = false, LH = 0;
+const hist = id => store.json('loom_hist:' + id, []);
+const msg = (t, bad) => { const e = q('#xsE'); if (e) { e.textContent = t; e.style.color = bad ? 'var(--err)' : 'var(--s)'; } };
+const bump = v => { const p = String(v || '1.0.0').split('.').map(Number); p[2] = (p[2] || 0) + 1; return p.join('.'); };
+function openStudio(id, tpl) {
+  const e = id && installed(id);
+  if (e && !isOwner(id)) return toast('Only the creator can edit this extension');
+  D = e ? { ...e } : { id: '', name: '', description: '', version: '1.0.0', tags: '', logo: '', readme: '', code: TPL[tpl] || TPL.Command, author: GH?.user?.login || 'me' };
+  if (!e) D.readme = '# My extension\n\nWhat it does, commands it adds, and how to use it.\n'; tab = 'code'; dirty = false; drawStudio(); st.classList.add('on');
+}
+const closeStudio = async () => { if (dirty && !await dialog({ title: 'Close without saving?', msg: 'Unsaved changes will be lost.', ok: 'Close', danger: true })) return; st.classList.remove('on'); };
+function drawStudio() {
+  const own_ = !D.id || isOwner(D.id), pub = remote.get(D.id);
+  st.innerHTML = `<div class="xsh"><b>Extension Studio</b><span class="bdg own">${D.id ? 'You own this' : 'New'}</span><span class="sp"></span>
+  <button class="btn line" data-k="ai">✨ AI</button><button class="btn line" data-k="exp">Export</button><button class="btn line" data-k="pub">${pub ? 'Update published' : 'Publish'}</button><button class="btn line" data-k="save">Save &amp; reload</button><button class="btn ghost" data-k="x">×</button></div>
+  <div class="xsb"><aside class="xss"><label>Name<input id="sN"></label><label>Version <button class="btn ghost" data-k="bump" style="height:20px">+ patch</button><input id="sV"></label><label>Description<input id="sD" maxlength="300"></label><label>Tags (comma separated)<input id="sT"></label>
+  <div class="split"><span class="xl" id="sL"></span><button class="btn line" data-k="logo">Logo</button><input type="file" id="sLf" accept="image/*" hidden></div><div class="card" id="sS"></div>
+  <button class="btn line" data-k="key">Publisher key…</button>${pub && own_ ? '<button class="btn danger" data-k="unpub">Unpublish</button>' : ''}</aside>
+  <section class="xsm"><div class="xst">${['code', 'readme', 'history'].map(t => `<button class="btn ${t === tab ? 'pri' : 'line'}" data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div><div class="xsc" id="xsC"></div></section></div>
+  <div class="xsf"><span id="xsP">Ln 1, Col 1</span><span class="er" id="xsE"></span><span>Ctrl+S save · Ctrl+Enter reload</span></div>`;
+  const g = s => q(s, st); g('#sN').value = D.name; g('#sV').value = D.version; g('#sD').value = D.description || ''; g('#sT').value = D.tags || '';
+  g('#sN').oninput = e => { D.name = e.target.value; dirty = true; }; g('#sV').oninput = e => { D.version = e.target.value; dirty = true; }; g('#sD').oninput = e => { D.description = e.target.value; dirty = true; }; g('#sT').oninput = e => { D.tags = e.target.value; dirty = true; };
+  const lg = () => { const p = g('#sL'); p.style.backgroundImage = D.logo ? `url('${String(D.logo).replace(/['"()\\]/g, '')}')` : ''; p.textContent = D.logo ? '' : (D.name || '?')[0]; }; lg();
+  g('#sLf').onchange = async e => { try { const f = e.target.files[0], u = URL.createObjectURL(f), im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const s = Math.min(im.naturalWidth, im.naturalHeight) || 128; c.getContext('2d').drawImage(im, (im.naturalWidth - s) / 2, (im.naturalHeight - s) / 2, s, s, 0, 0, 128, 128); D.logo = c.toDataURL('image/webp', .88); dirty = true; lg(); }; im.src = u; } catch (er) { msg(er.message, 1); } };
+  drawTab();
+}
+const rescan = () => { const s = q('#sS', st); if (s) s.innerHTML = '<b>Safety scan</b>' + scanHtml(D.code); };
+function drawTab() {
+  const C = q('#xsC', st); rescan();
+  if (tab === 'code') {
+    C.innerHTML = '<div class="xse"><pre class="g" id="eg"></pre><div class="w"><pre class="h" id="eh"></pre><textarea id="et" spellcheck="false" autocapitalize="off" wrap="off"></textarea></div></div>';
+    const t = q('#et', C), paint = () => { let h; try { h = hljs.highlight(t.value, { language: 'javascript', ignoreIllegals: true }).value; } catch { h = esc(t.value); } q('#eh', C).innerHTML = h + '\n'; const n = t.value.split('\n').length; q('#eg', C).textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n'); t.style.height = '0'; t.style.height = t.scrollHeight + 'px'; };
+    const pos = () => { const s = t.value.slice(0, t.selectionStart).split('\n'); q('#xsP', st).textContent = `Ln ${s.length}, Col ${s.at(-1).length + 1}`; };
+    t.value = D.code; paint();
+    t.oninput = () => { D.code = t.value; dirty = true; paint(); rescan(); }; ['keyup', 'click'].forEach(v => t.addEventListener(v, pos));
+    t.onkeydown = e => {
+      const s = t.selectionStart, en = t.selectionEnd, v = t.value, ins = (x, c) => { document.execCommand('insertText', false, x); if (c != null) t.setSelectionRange(c, c); };
+      if (e.key === 'Tab') { e.preventDefault(); ins('  '); }
+      else if (e.key === 'Enter' && !MOD(e)) { const ls = v.lastIndexOf('\n', s - 1) + 1, ind = v.slice(ls, s).match(/^\s*/)[0]; e.preventDefault(); ins('\n' + ind + (/[{(\[]\s*$/.test(v.slice(ls, s)) ? '  ' : '')); }
+      else if ('([{"\'`'.includes(e.key) && s === en && !MOD(e)) { e.preventDefault(); const cl = { '(': ')', '[': ']', '{': '}' }[e.key] || e.key; ins(e.key + cl, s + 1); }
+    };
+    t.focus();
+  } else if (tab === 'readme') {
+    C.innerHTML = '<div class="xrd"><textarea id="rt" spellcheck="false" placeholder="Write Markdown…"></textarea><div class="xvb" id="rp"></div></div>';
+    const t = q('#rt', C), p = q('#rp', C); t.value = D.readme; p.innerHTML = md2(D.readme); t.oninput = () => { D.readme = t.value; dirty = true; p.innerHTML = md2(t.value); };
+  } else {
+    const h = hist(D.id || '_');
+    C.innerHTML = '<div style="padding:14px;display:flex;flex-direction:column;gap:8px">' + (h.map((x, i) => `<div class="card split"><span><b>v${esc(x.v)}</b><div class="muted">${new Date(x.ts).toLocaleString()} · ${x.code.split('\n').length} lines</div></span><button class="btn line" data-r="${i}">Restore</button></div>`).join('') || '<div class="muted">Every save keeps a snapshot here (last 15). Nothing yet.</div>') + '</div>';
+    C.onclick = e => { const b = e.target.closest('[data-r]'); if (b) { D.code = h[+b.dataset.r].code; dirty = true; tab = 'code'; drawStudio(); toast('Restored — save to apply'); } };
+  }
+}
+async function saveExt() {
+  if (!D.name.trim()) return msg('Name required', 1);
+  try { new AF('Loom', 'ext', D.code); } catch (e) { return msg('Syntax error: ' + e.message, 1); }
+  const id = D.id || slug(D.name) + '-' + Math.random().toString(36).slice(2, 5), prev = installed(id);
+  if (prev && prev.code !== D.code) { const h = hist(id); h.unshift({ v: prev.version, code: prev.code, ts: Date.now() }); store.set('loom_hist:' + id, JSON.stringify(h.slice(0, 15))); }
+  LoomExt.unload(id);
+  try { await LoomExt.install({ ...(prev || { enabled: true }), ...D, id, name: D.name.trim(), author: D.author || GH?.user?.login || 'me' }); } catch (e) { return msg(e.message, 1); }
+  D.id = id; own(id); dirty = false; store.set('loom_pm:' + id, JSON.stringify({ version: D.version, readme: D.readme, logo: D.logo, description: D.description })); msg('Saved & reloaded v' + D.version + ' at ' + new Date().toLocaleTimeString()); renderAll(); return true;
+}
+async function publishExt() {
+  if (!await saveExt()) return; if (!isOwner(D.id)) return msg('Only the creator can publish this', 1);
+  if (!await dialog({ title: 'Publish publicly?', msg: 'Code, logo and README become visible and installable by everyone. Only your publisher key can update it afterwards.', ok: 'Publish' })) return;
+  const body = { p_id: D.id, p_name: D.name, p_version: D.version, p_description: D.description || '', p_author: D.author, p_code: D.code, p_logo: D.logo || '', p_readme: D.readme || '', p_token: pk() };
+  try { try { await rpc('publish_extension', { ...body, p_tags: D.tags || '' }); } catch (e) { if (/p_tags|function/i.test(e.message) && !/Only the publisher/.test(e.message)) await rpc('publish_extension', body); else throw e; } await loadRemote(); toast('Published ✓'); drawStudio(); } catch (e) { msg(e.message, 1); }
+}
+async function aiDo(kind) {
+  if (!Loom.ai) return; msg('Gemini is working…');
+  const P = { readme: 'Write a clear README in Markdown (what it does, commands, usage, permissions) for this Loom extension. Output only Markdown.\n\n', fix: 'Fix bugs and syntax errors in this Loom extension. Return the full code in one ```js block.\n\n', improve: 'Improve this Loom extension (robustness, UX, small features). Return the full code in one ```js block.\n\n' };
+  try { let t = await Loom.ai.ask(P[kind] + D.code); if (kind === 'readme') { D.readme = t.replace(/^```\w*\n|```$/g, '').trim(); tab = 'readme'; } else { const m = t.match(/```(?:js|javascript)?\n([\s\S]*?)```/); D.code = (m ? m[1] : t).trim(); tab = 'code'; } dirty = true; drawStudio(); msg('AI result applied — review, then save'); } catch (e) { msg(e.message, 1); }
+}
+st.onclick = async e => {
+  const t = e.target.closest('[data-t]'); if (t) { tab = t.dataset.t; return drawStudio(); }
+  const k = e.target.closest('[data-k]'); if (!k) return; const a = k.dataset.k;
+  if (a === 'x') closeStudio(); else if (a === 'save') saveExt(); else if (a === 'pub') publishExt();
+  else if (a === 'bump') { D.version = bump(D.version); q('#sV', st).value = D.version; dirty = true; }
+  else if (a === 'logo') q('#sLf', st).click();
+  else if (a === 'exp') saveBytes((D.id || slug(D.name) || 'extension') + '.loomext', JSON.stringify(D), 'application/json');
+  else if (a === 'unpub') { if (await dialog({ title: 'Unpublish?', msg: 'Removes it from the marketplace. Your local copy stays.', ok: 'Unpublish', danger: true })) try { await rpc('unpublish_extension', { p_id: D.id, p_token: pk() }); remote.delete(D.id); toast('Unpublished'); drawStudio(); } catch (er) { msg(er.message, 1); } }
+  else if (a === 'key') { const m = modal('Publisher key'); m.body.innerHTML = '<div class="muted">This key proves you created your published extensions. Back it up; anyone with it can update them. Paste an old key to regain access on a new device.</div><input id="kk" spellcheck="false">'; const i = q('#kk', m.body); i.value = pk(); const b = document.createElement('button'); b.className = 'btn pri'; b.textContent = 'Use this key'; b.onclick = async () => { if (i.value.trim().length >= 16) { store.set('loom_pub_key', i.value.trim()); myHash = await sha(i.value.trim()); m.close(); toast('Key saved'); } }; m.body.appendChild(b); }
+  else if (a === 'ai') { const m = modal('AI assistant'); m.body.innerHTML = '<button class="btn line" data-a="readme">Write README</button><button class="btn line" data-a="fix">Fix errors</button><button class="btn line" data-a="improve">Improve code</button>'; m.body.onclick = ev => { const b = ev.target.closest('[data-a]'); if (b) { m.close(); aiDo(b.dataset.a); } }; }
+};
+st.addEventListener('keydown', e => { if (!MOD(e)) return; const k = e.key.toLowerCase(); if (k === 's' || k === 'enter') { e.preventDefault(); e.stopPropagation(); saveExt(); } }, true);
+const MOD = e => e.ctrlKey || e.metaKey;
+
+/* ---------- commands, import, packs, updates, deep link ---------- */
+const rmCmd = n => { const i = COMMANDS.findIndex(c => c[1] === n); if (i >= 0) COMMANDS.splice(i, 1); }; rmCmd('Edit extension…'); rmCmd('New extension…');
+const pickTpl = () => { const m = modal('New extension — pick a starter'); m.body.innerHTML = Object.keys(TPL).map(k => `<div class="card" data-k="${k}" style="cursor:pointer"><b>${k}</b></div>`).join(''); m.body.onclick = e => { const c = e.target.closest('[data-k]'); if (c) { m.close(); openStudio(null, c.dataset.k); } }; };
+const mine = () => LoomExt.list.filter(x => isOwner(x.id));
+const importExt = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.loomext,.json'; i.onchange = async () => { try { const x = JSON.parse(await i.files[0].text()); if (!x.code || !x.name) throw Error('Not a .loomext file'); new AF('Loom', 'ext', x.code); if (!await dialog({ title: 'Install ' + x.name + '?', msg: 'Imported extensions run with full access. Only install code you trust.', ok: 'Install' })) return; await LoomExt.install({ ...x, id: x.id || slug(x.name) }); toast('Installed ' + x.name); renderAll(); } catch (e) { toast(e.message); } }; i.click(); };
+const PACKS = { 'Web developer': ['html-tools', 'color-tools', 'css-tools', 'json-tools', 'regex-tester', 'url-tools'], 'Writer': ['markdown-tools', 'text-stats', 'reading-time', 'hard-wrap', 'zen-mode', 'text-cleanup'], 'Data wrangler': ['csv-json', 'json-tools', 'sql-format', 'number-bases', 'hash-tools', 'diff-view'] };
+COMMANDS.push(['Extensions', 'New extension (Studio)…', pickTpl],
+  ['Extensions', 'Edit my extension…', () => { const l = mine(); if (!l.length) return toast('You have not created any extensions yet'); const m = modal('My extensions'); m.body.innerHTML = l.map(x => `<div class="card split" data-id="${esc(x.id)}" style="cursor:pointer"><span><b>${esc(x.name)}</b><div class="muted">v${esc(x.version)}</div></span><span class="muted">Open</span></div>`).join(''); m.body.onclick = e => { const c = e.target.closest('[data-id]'); if (c) { m.close(); openStudio(c.dataset.id); } }; }],
+  ['Extensions', 'Import extension (.loomext)…', importExt],
+  ['Extensions', 'Install a pack…', () => { const m = modal('Extension packs'); m.body.innerHTML = Object.entries(PACKS).map(([n, ids]) => `<div class="card split"><span><b>${n}</b><div class="muted">${ids.length} extensions</div></span><button class="btn pri" data-p="${n}">Install pack</button></div>`).join(''); m.body.onclick = async e => { const b = e.target.closest('[data-p]'); if (!b) return; let n = 0; for (const id of PACKS[b.dataset.p]) { const x = (window.LOOM_PACK || []).find(y => y.id === id); if (x && !installed(id)) { await LoomExt.install(x); n++; } } m.close(); toast(n + ' installed'); renderAll(); }; }],
+  ['Extensions', 'Update all extensions', async () => { let n = 0; for (const e of [...LoomExt.list]) { const r = remote.get(e.id); if (r && !isOwner(e.id) && newer(r.version, e.version)) { await update(e.id); n++; } } toast(n ? n + ' updated' : 'Everything is up to date'); }]);
+const nb = document.createElement('button'); nb.className = 'btn'; nb.textContent = '+ New'; nb.title = 'New extension'; nb.onclick = pickTpl; const xh = q('#xside .xh'); if (xh) xh.insertBefore(nb, $('xN'));
+const nx = $('xN'); if (nx) nx.onclick = e => { e.stopImmediatePropagation(); pickTpl(); };
+(async () => {
+  await loadRemote();
+  if (!store.get('loom_own_mig')) { store.set('loom_own_mig', '1'); LoomExt.list.forEach(x => { if (x.author !== 'Loom' && !packIds.has(x.id) && !remote.has(x.id)) own(x.id); }); }
+  deco();
+  const up = LoomExt.list.filter(e => remote.get(e.id) && !isOwner(e.id) && newer(remote.get(e.id).version, e.version)).length; if (up) toast(up + ' extension update(s) — run “Update all extensions”');
+  const m = location.hash.match(/^#ext=([\w-]+)/), x = m && remote.get(m[1]);
+  if (x && !installed(x.id)) { const d = modal(x.name); d.body.innerHTML = `<div class="muted">${esc(x.author || '')} · v${esc(x.version)}</div><div>${esc(x.description || '')}</div><div class="card">${scanHtml(x.code)}</div><button class="btn pri" style="align-self:flex-end">Install</button>`; q('button', d.body).onclick = async () => { await LoomExt.install({ ...x }); d.close(); toast('Installed ' + x.name); renderAll(); }; }
+})();
+window.LoomStudio = { open: openStudio, isOwner, md: md2 };
+})();
+</script>
+<!-- ===== end patch v7 ===== -->
 </body>
 </html>
